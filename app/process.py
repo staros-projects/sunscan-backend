@@ -40,7 +40,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             'Autocrop': autocrop, 
             'FREE_AUTOPOLY': False, 
             'ZEE_AUTOPOLY': False, 
-            'NOISEREDUC': dopcont, 
+            'NOISEREDUC': False, 
             'DOPCONT': dopcont, 
             'VOL': False, 
             'POL': False, 
@@ -265,23 +265,9 @@ def create_doppler_image(wd, frames):
             img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
-            # clahe
-            clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
-            cl1 = clahe.apply(img_doppler)
-            
-            Seuil_bas=np.percentile(cl1, 45)
-            Seuil_haut=np.percentile(cl1,99.9999)*1.05
-
-            cc=(cl1-Seuil_bas)*(65000/(Seuil_haut-Seuil_bas))
-            cc[cc<0]=0
-            cc=np.array(cc, dtype='uint16')
-            cc=cv2.flip(cc,0)
-
-            cc = sharpenImage(cc)
-                     
             # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),cc)
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),cc/256)
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),img_doppler/256)
                 
         except:
             pass

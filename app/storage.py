@@ -46,7 +46,7 @@ def get_scans(path='storage/scans/'):
                         'clahe':'Clahe + Unsharp mask',
                         'protus':'Artificial eclipse : Clahe + Unsharp mask',
                         'cont':'Continuum : Clahe + Unsharp mask',
-                        'doppler':'Doppler : Clahe + Unsharp mask',
+                        'doppler':'Doppler',
                         'clahe_colour':'Clahe + Unsharp mask + Halpha colorization',
                         'clahe_colour_caII':'Clahe + Unsharp mask + Ca II colorization',
                         'raw':  'Raw'
@@ -55,7 +55,7 @@ def get_scans(path='storage/scans/'):
                     for im, im_desc in images_type.items():
                         p = os.path.join(ser_dirname,'sunscan_'+im+'.jpg')
                         ti_m = os.path.getmtime(path)
-                        images[im] = [p+'?'+ti_m, im_desc, os.path.exists(os.path.join(ser_dirname,'sunscan_'+im+'.jpg'))]
+                        images[im] = [im_desc, os.path.exists(p), ti_m]
                                 
                     scans.append({'path':ser_dirname, 'ser':ser_path, 'images':images, 'status':'pending', 'creation_date':cti})
     scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
