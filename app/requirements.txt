@@ -1,0 +1,16 @@
+astropy~=6.0.0
+fastapi==0.110.0
+lsq-ellipse==2.0.0
+matplotlib==3.7.1
+numba==0.57.0
+numpy~=1.24.4
+opencv_python==4.7.0.72
+picamera2==0.3.17
+Pillow==10.2.0
+psutil==5.9.8
+scipy==1.12.0
+serfilesreader==0.0.6
+v4l2-python3==0.3.4
+
+opencv-python~=4.7.0.72
+pydantic~=2.5.3

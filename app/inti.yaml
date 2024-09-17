@@ -1,0 +1,42 @@
+directory: D:/sunscan/2024_04_09/sunscan_2024_04_09-11_40_42/
+dec doppler: 6
+dec cont: 12
+size_pix_cam: '0.0024'
+bin_cam: '1'
+poly_slit_a: 3.6401742376093703e-05
+poly_slit_b: -0.020823078124122384
+poly_slit_c: 33.156200070538276
+ang_tilt: 0
+ratio_sysx: 0
+free_autpoly: 0
+zee_autpoly: 0
+poly_free_a: 0
+poly_free_b: 0
+poly_free_c: 0
+pos_free_blue: 0
+pos_free_red: 0
+free_shift: 0
+force_free_magn: false
+win_posx: 300
+win_posy: 200
+screen_scale: 1.5
+observer: ''
+instru: ''
+site_long: 0.0
+site_lat: 0.0
+angle P: 0
+contact: ''
+wavelength: 0
+wave_label: Manual
+inversion NS: false
+inversion EW: false
+autocrop: true
+pos fente min: 0
+pos fente max: 0
+crop fixe hauteur: 0
+crop fixe largeur: 0
+zeeman_shift: 0.0
+reduction bruit: 0
+free_autopoly: 0
+zee_autopoly: 0
+reduction_bruit: true
