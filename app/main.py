@@ -131,7 +131,7 @@ async def update(file: UploadFile = File(...)):
             buffer.write(await file.read())
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-             zip_ref.extractall("/var/www/sunscan-backend/")
+             zip_ref.extractall("/var/www/sunscan-backend/app/")
 
         os.system("sudo systemctl restart uvicorn")
 
@@ -144,7 +144,7 @@ async def update(file: UploadFile = File(...)):
 async def connect(request: Request):
     du = get_available_size()
     
-    version = {'camera':current_camera, 'backend_api_version':'0.9.1', 'battery':power.get_battery(), 'battery_power_plugged':power.battery_power_plugged()}
+    version = {'camera':current_camera, 'backend_api_version':'1.1.5', 'battery':power.get_battery(), 'battery_power_plugged':power.battery_power_plugged()}
     return JSONResponse(content=jsonable_encoder(du | version))
 
 @app.get("/sunscan/scans", response_class=JSONResponse)
