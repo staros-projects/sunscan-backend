@@ -131,7 +131,7 @@ async def update(file: UploadFile = File(...)):
             buffer.write(await file.read())
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-             zip_ref.extractall("/var/www/staros_sunscan_backend/")
+             zip_ref.extractall("/var/www/sunscan-backend/")
 
         os.system("sudo systemctl restart uvicorn")
 
@@ -158,17 +158,6 @@ async def connect(request: Request):
     if app.cameraController.getStatus() != "conneted":
         app.cameraController.start()
     return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
-
-@app.get("/camera/switch", response_class=JSONResponse)
-async def witchCameraAndReboot(request: Request):
-    if "imx477" == current_camera:
-        print('switch to imx219 and reboot')
-        os.system('sudo cp /boot/firmware/config_imx219.txt /boot/firmware/config.txt')
-    else:
-        print('switch to imx477 and reboot')
-        os.system('sudo cp /boot/firmware/config_imx477.txt /boot/firmware/config.txt')
-    time.sleep(5)
-    os.system('sudo shutdown -h now')
     
 @app.get("/camera/disconnect", response_class=JSONResponse)
 async def disconnect(request: Request):
