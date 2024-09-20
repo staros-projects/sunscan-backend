@@ -2,6 +2,8 @@
 
 This repository contains the official backend for the Sunscan project, a revolutionary solar imaging and analysis tool.
 
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi) ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+
 ## Description
 
 Sunscan is a spectroheliograph designed to capture images of the Sun in minutes, directly from a smartphone. This complete and autonomous device is the result of several months of work by the STAROS team (Guillaume Bertrand, Christian Buil, Valérie Desnoux, Olivier Garde, Matthieu Le Lain).
@@ -58,13 +60,19 @@ To start the backend server:
 
 2. Run the following command:
    ```
-   uvicorn app.main:app --reload
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
    ```
 
    This command does the following:
    - `app.main` refers to the `main.py` file in the `app` directory
    - `:app` refers to the FastAPI instance in the `main.py` file
    - `--reload` enables auto-reloading, which is useful during development
+
+   ```
+   # or just launch the start script
+   ./start.sh
+   ```
 
 3. The server should start and display a message indicating it's running, along with the address and port (e.g., "Uvicorn running on http://127.0.0.1:8000").
 
