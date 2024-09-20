@@ -1,16 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Feb  3 11:39:42 2024
+# INTI configuration
 
-@author: valer
-"""
+# Language setting
+# LG=1 for French, LG=2 for English
+LG = 1
 
-# parametrisation d'INTI
-#
-# lange LG=1 en FR - LG=2 en EN
-LG= 1
-
-# mode faible dynamique pour Guillaume
-# Si False INTI mode normal
-# Si True INTI s'adapte a faible dynamique
-LowDyn=True
+# Set Low dynamic range mode
+# If False, INTI operates in normal mode
+# If True, INTI adapts to low dynamic range
+LowDyn = True
