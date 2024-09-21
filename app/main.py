@@ -1,3 +1,18 @@
+"""
+Main FastAPI application for the SunScan backend.
+
+This module sets up the FastAPI application for the SunScan device. It handles:
+- API routes for device control and data retrieval
+- Camera control and image processing
+- WebSocket communication for real-time data streaming
+- System updates and diagnostics
+- Scan processing and management
+
+The application integrates various components such as camera controllers,
+power management, and storage utilities to provide a comprehensive
+backend for the SunScan device.
+"""
+
 import logging
 import os
 import io
@@ -13,7 +28,6 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import StreamingResponse
-
 
 import base64
 from fastapi import FastAPI, WebSocket, Request, File, UploadFile, HTTPException, WebSocketDisconnect, Header, Response, Body, BackgroundTasks
@@ -51,14 +65,19 @@ class CameraControls(BaseModel):
     exp: float
     gain: float
 
-# Set logger
+# Logging configuration (currently commented out)
 # now = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
 # logfile = f'logs/{now}.log'
 # logging.basicConfig(filename=logfile, filemode='w', level=logging.DEBUG)
 
-
-
 def sys_debug():
+    """
+    Log detailed system information for debugging purposes.
+    
+    This function captures and logs various system details including OS,
+    platform, architecture, and Python version. It's crucial for
+    troubleshooting and ensuring compatibility across different setups.
+    """
     logging.debug('-- System information --')
     logging.debug(f'OS   : {os.name}')
     logging.debug(f'Plateform   : {platform.system()}')
@@ -69,12 +88,15 @@ def sys_debug():
 sys_debug()
 app = FastAPI()
 
+# CORS configuration to allow all origins
 origins = [
     "*",
 ]
 
+# Initialize a queue for inter-thread communication
 app.q = queue.Queue()
 
+# Add CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -83,27 +105,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static file directories
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 templates = Jinja2Templates(directory="templates")
+
+# Initialize camera controller and normalization flag
 app.cameraController = None
 app.normalize = False
 
+# Determine the current camera model from system configuration
 current_dt_overlay=os.popen('grep dtoverlay=imx /boot/firmware/config.txt').read()
 print((current_dt_overlay))
 current_camera = "imx219" if "imx219" in current_dt_overlay else "imx477"
 
+# Initialize power management helper
 power = PowerHelper()
 
 def getCameraControls():
+    """
+    Retrieve and return current camera control settings.
+    
+    This function interfaces with the camera controller to fetch
+    the current settings such as exposure, gain, and other parameters.
+    It returns these settings in a JSON format for API responses.
+    
+    Returns:
+        JSONResponse: A JSON object containing current camera settings.
+    """
     if app.cameraController:
         content = jsonable_encoder(app.cameraController.getCameraControls())
         return JSONResponse(content=content) 
 
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    # dashboard config & stats
+    """
+    Render the home page with comprehensive system information.
+    
+    This route generates an HTML response containing detailed system
+    information, useful for diagnostics and user information. It includes
+    OS details, platform information, and Python version.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        TemplateResponse: Rendered HTML template with system information.
+    """
     return templates.TemplateResponse("index.html", {"request": request,
                                                      "os" : os.name,
                                                      "platform" : platform.system(),
@@ -113,17 +161,55 @@ async def home(request: Request):
 
 @app.get("/data/scans", response_class=HTMLResponse)
 async def home(request: Request):
-    # dashboard config & stats
+    """
+    Retrieve and return data about all scans.
+    
+    This endpoint fetches information about all scans stored in the system.
+    It's useful for displaying a list of available scans to the user.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        HTMLResponse: HTML content containing scan data.
+    """
     return get_data()
 
 @app.get("/data/snapshots", response_class=HTMLResponse)
 async def home(request: Request):
-    # dashboard config & stats
+    """
+    Retrieve and return data about all snapshots.
+    
+    Similar to the scans endpoint, this fetches information about
+    all snapshots taken by the device. It's used to display a list
+    of available snapshots to the user.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        HTMLResponse: HTML content containing snapshot data.
+    """
     return get_data2()
-
 
 @app.post("/update")
 async def update(file: UploadFile = File(...)):
+    """
+    Handle system updates via uploaded zip file.
+    
+    This endpoint allows for updating the backend software. It receives
+    a zip file, extracts it to the appropriate directory, and restarts
+    the service to apply the update.
+    
+    Args:
+        file (UploadFile): The uploaded zip file containing the update.
+    
+    Returns:
+        JSONResponse: A response indicating the success or failure of the update.
+    
+    Raises:
+        HTTPException: If there's an error during the update process.
+    """
     try:
         zip_path = "./storage/tmp/sunscan_backend.zip"
         print('update', file)
@@ -142,6 +228,20 @@ async def update(file: UploadFile = File(...)):
 
 @app.get("/sunscan/stats", response_class=JSONResponse)
 async def connect(request: Request):
+    """
+    Retrieve comprehensive system statistics.
+    
+    This endpoint provides a wealth of information about the system's
+    current state, including storage capacity, camera details, API version,
+    and battery status. It's crucial for monitoring the device's health
+    and capabilities.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON object containing various system statistics.
+    """
     du = get_available_size()
     
     version = {'camera':current_camera, 'backend_api_version':'1.1.5', 'battery':power.get_battery(), 'battery_power_plugged':power.battery_power_plugged()}
@@ -149,18 +249,55 @@ async def connect(request: Request):
 
 @app.get("/sunscan/scans", response_class=JSONResponse)
 async def connect(request: Request):
+    """
+    Retrieve a list of all available scans.
+    
+    This endpoint returns information about all scans stored in the system.
+    It's used to provide an overview of available scan data to the user
+    or other parts of the application.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON array containing information about each scan.
+    """
     scans = get_scans()
     return JSONResponse(content=jsonable_encoder(scans))
 
 @app.get("/camera/imx477/connect", response_class=JSONResponse)
 async def connect(request: Request):
+    """
+    Establish a connection to the IMX477 camera.
+    
+    This endpoint initializes and connects to the IMX477 camera. It sets up
+    the camera controller and starts the camera if it's not already connected.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON object indicating the camera's connection status.
+    """
     app.cameraController = CameraController(IMX477Camera_CSI())
-    if app.cameraController.getStatus() != "conneted":
+    if app.cameraController.getStatus() != "connected":
         app.cameraController.start()
     return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
     
 @app.get("/camera/disconnect", response_class=JSONResponse)
 async def disconnect(request: Request):
+    """
+    Disconnect the currently connected camera.
+    
+    This endpoint safely disconnects the camera if one is currently connected.
+    It's important for properly shutting down the camera connection when needed.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON object indicating the updated camera connection status.
+    """
     if app.cameraController:
         app.cameraController.stop()
         return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
@@ -169,6 +306,18 @@ async def disconnect(request: Request):
     
 @app.get("/camera/status", response_class=JSONResponse)
 async def disconnect(request: Request):
+    """
+    Retrieve the current status of the camera.
+    
+    This endpoint checks and returns the current connection status of the camera.
+    It's useful for monitoring the camera's state in the application.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON object indicating the current camera status.
+    """
     if app.cameraController:
         return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
     else:
@@ -176,77 +325,248 @@ async def disconnect(request: Request):
     
 @app.get("/camera/crop/up/", response_class=JSONResponse)
 async def increaseExpTime(request: Request):
+    """
+    Adjust the camera's crop position upwards.
+    
+    This endpoint moves the camera's crop area upwards. It's used for
+    fine-tuning the area of interest in the camera's field of view.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera control settings after the adjustment.
+    """
     if app.cameraController:
         app.cameraController.setCropVerticalPosition('up')
         return getCameraControls()
     
 @app.get("/camera/crop/down/", response_class=JSONResponse)
 async def increaseExpTime(request: Request):
+    """
+    Adjust the camera's crop position downwards.
+    
+    Similar to the 'up' endpoint, this moves the camera's crop area downwards.
+    It allows for precise control over the captured image area.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera control settings after the adjustment.
+    """
     if app.cameraController:
         app.cameraController.setCropVerticalPosition('down')
         return getCameraControls()
     
 @app.post("/sunscan/set-time/", response_class=JSONResponse)
 async def setTime(props:SetTimeProp, request: Request):
+    """
+    Set the system time.
+    
+    This endpoint allows for setting the system time. It's crucial for
+    ensuring accurate timestamps on scans and other time-sensitive operations.
+    
+    Args:
+        props (SetTimeProp): A model containing the new time as a Unix timestamp.
+        request (Request): The incoming request object.
+    
+    Returns:
+        None: This endpoint doesn't return a response directly.
+    """
     os.system("sudo date -s '"+str(time.ctime(int(props.unixtime)))+"'")
-
 
 @app.post("/camera/controls/", response_class=JSONResponse)
 async def updateCameraControls(controls:CameraControls, request: Request):
+    """
+    Update camera control settings.
+    
+    This endpoint allows for adjusting various camera settings such as
+    exposure time and gain. It's essential for optimizing image capture
+    based on current conditions.
+    
+    Args:
+        controls (CameraControls): A model containing the new camera settings.
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: The updated camera control settings after the changes.
+    """
     if app.cameraController:
         app.cameraController.setCameraControls(controls)
         return getCameraControls()
     
 @app.get("/camera/toggle-crop/", response_class=JSONResponse)
 async def toggleCrop(request: Request):
+    """
+    Toggle the camera's crop mode.
+    
+    This endpoint switches the camera's crop mode on or off. Cropping can be
+    useful for focusing on specific areas of interest in the image.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: The updated camera control settings after toggling crop mode.
+    """
     if app.cameraController:
         app.cameraController.toggleCrop()
         return getCameraControls()
 
 @app.get("/camera/infos/", response_class=JSONResponse)
 async def infos(request: Request):
+    """
+    Retrieve detailed camera information.
+    
+    This endpoint provides comprehensive information about the camera's
+    current settings and capabilities. It's useful for diagnostics and
+    for informing users about the camera's current state.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Detailed camera information and settings.
+    """
     if app.cameraController:
         return getCameraControls()
     
 @app.get("/camera/toggle-color-mode/", response_class=JSONResponse)
 async def toggleColorMode(request: Request):
+    """
+    Toggle the camera's color mode.
+    
+    This endpoint switches between color and monochrome imaging modes.
+    It's important for different types of scientific observations.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after toggling the color mode.
+    """
     app.cameraController.toggleColorMode()
     return getCameraControls()
 
 @app.get("/camera/toggle-normalize/", response_class=JSONResponse)
 async def toggleNormalize(request: Request):
+    """
+    Toggle image normalization.
+    
+    This endpoint enables or disables image normalization, which can
+    enhance image quality and consistency across different lighting conditions.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after toggling normalization.
+    """
     app.cameraController.toggleNormalize()
     return getCameraControls()
 
 @app.get("/camera/toggle-bin/", response_class=JSONResponse)
 async def toggleBin(request: Request):
+    """
+    Toggle camera binning mode.
+    
+    This endpoint switches the camera's binning mode on or off. Binning can
+    improve signal-to-noise ratio at the cost of resolution.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after toggling binning mode.
+    """
     app.cameraController.toggleBin()
     return getCameraControls()
 
 @app.get("/camera/toggle-monobin-mode/", response_class=JSONResponse)
 async def toggleMonoBinMode(request: Request):
+    """
+    Toggle monochrome binning mode.
+    
+    This endpoint switches between different monochrome binning modes,
+    which can be useful for specific types of astronomical observations.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after toggling mono binning mode.
+    """
     app.cameraController.toggleMonoBinMode()
     return getCameraControls()
 
 @app.get("/camera/toggle-bin/", response_class=JSONResponse)
 async def toggleFlat(request: Request):
+    """
+    Toggle flat field correction.
+    
+    This endpoint enables or disables flat field correction, which is used
+    to improve image uniformity by compensating for variations in pixel sensitivity.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after toggling flat field correction.
+    """
     app.cameraController.toggleFlat()
     return getCameraControls()
 
 @app.get("/camera/record/start/", response_class=JSONResponse)
 async def decreaseGain(request: Request):
+    """
+    Start camera recording.
+    
+    This endpoint initiates the camera recording process. It's used for
+    capturing video or a series of images over time.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after starting the recording.
+    """
     if app.cameraController:
         app.cameraController.startRecord()
         return getCameraControls()
     
 @app.get("/camera/record/stop/", response_class=JSONResponse)
 async def decreaseGain(request: Request):
+    """
+    Stop camera recording.
+    
+    This endpoint stops the ongoing camera recording process. It's important
+    for properly ending a recording session and saving the captured data.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after stopping the recording.
+    """
     if app.cameraController:
         app.cameraController.stopRecord()
         return getCameraControls()
 
 @app.get("/camera/reset-controls/", response_class=JSONResponse)
 async def resetControls(request: Request):
+    """
+    Reset camera controls to default values.
+    
+    This endpoint resets all camera settings to their default values. It's useful
+    for quickly returning to a known, standard configuration.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Updated camera settings after resetting to defaults.
+    """
     if app.cameraController:
         app.cameraController.resetControls()
         return getCameraControls()
@@ -256,6 +576,18 @@ app.takeSnapShot = False
 app.snapshot_filename = ''
 @app.get("/camera/take-snapshot/", response_class=JSONResponse)
 async def takeSnapShot(request: Request):
+    """
+    Capture a snapshot with the camera.
+    
+    This endpoint triggers the camera to take a single snapshot. It generates
+    a unique filename for the snapshot based on current time and camera settings.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: Information about the captured snapshot, including its filename.
+    """
     if app.cameraController:
         app.takeSnapShot = True
         d = time.strftime("%Y_%m_%d-%H_%M_%S")
@@ -264,11 +596,35 @@ async def takeSnapShot(request: Request):
         return JSONResponse(content=jsonable_encoder({"filename":app.snapshot_filename}))
 
 def notifyScanProcessCompleted(filename, status):
+    """
+    Notify that a scan process has completed.
+    
+    This function is called when a scan processing task finishes. It adds
+    a notification to the queue, which can be picked up by the WebSocket
+    to inform the client about the completion of the scan process.
+    
+    Args:
+        filename (str): The filename of the completed scan.
+        status (str): The status of the completed scan process.
+    """
     print('add event to queue', filename, 'scan_process_'+md5(filename.encode()).hexdigest())
     app.q.put('scan_process_'+md5(filename.encode()).hexdigest()+';#;'+status) 
 
 @app.post("/sunscan/scan/delete/", response_class=JSONResponse)
 async def deleteScan(scan:Scan, background_tasks: BackgroundTasks):
+    """
+    Delete a scan directory.
+    
+    This endpoint removes a specified scan directory and all its contents.
+    It's used for managing storage and removing unwanted scan data.
+    
+    Args:
+        scan (Scan): A model containing the filename of the scan to be deleted.
+        background_tasks (BackgroundTasks): FastAPI's background tasks handler.
+    
+    Returns:
+        None: This endpoint doesn't return a response directly.
+    """
     if os.path.exists(scan.filename):
         shutil.rmtree(scan.filename)
         print(f"The directory {scan.filename} has been deleted.")
@@ -277,66 +633,93 @@ async def deleteScan(scan:Scan, background_tasks: BackgroundTasks):
 
 @app.post("/sunscan/scan/process/", response_class=JSONResponse)
 async def processScan(scan:Scan, background_tasks: BackgroundTasks):
+    """
+    Process a scan in the background.
+    
+    This endpoint initiates the processing of a scan. The actual processing
+    is done in a background task to avoid blocking the API. It handles
+    various processing options like autocropping and contrast adjustment.
+    
+    Args:
+        scan (Scan): A model containing scan processing parameters.
+        background_tasks (BackgroundTasks): FastAPI's background tasks handler.
+    
+    Returns:
+        None: The processing is done in the background, so no immediate return.
+    """
     if (os.path.exists(scan.filename)):
         background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size)
 
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time communication.
     
+    This endpoint handles WebSocket connections for real-time data streaming.
+    It continuously sends camera frames, ADU values, and other real-time data
+    to connected clients. It also handles notifications from the queue.
+    
+    Args:
+        websocket (WebSocket): The WebSocket connection object.
+    
+    The function runs in an infinite loop, continuously sending data until
+    the WebSocket connection is closed.
+    """
     await websocket.accept()
 
     print("Socket is running...")
     try:
-        # while open socket
+        # Infinite loop to handle continuous data streaming
         while True:
-
+            # Check for notifications in the queue
             if not app.q.empty(): 
                 print('q')
                 await websocket.send_text(app.q.get()) 
                 
+            # Handle camera frame streaming if camera is connected
             if app.cameraController and app.cameraController.getStatus() == 'connected':
                 frame = app.cameraController.getLastFrame() 
     
                 if len(frame):
                     r = frame / 256
                     if not app.cameraController.isRecording():
-
-                        # resize image
+                        # Resize image for streaming
                         scale_percent = 90 if app.cameraController.isInColorMode() else 70
                         width = int(frame.shape[1] * scale_percent / 100)
                         height = int(frame.shape[0] * scale_percent / 100)
      
+                        # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename:
                             d = time.strftime("%Y_%m_%d")
                             cv2.imwrite(app.snapshot_filename,frame) 
                             app.snapShotCount += 1
                             app.takeSnapShot = False
                     
+                        # Get and send ADU values
                         max_adu = app.cameraController.getMaxADU()
-
-                        #if not app.cameraController.isInBinMode():
                         r = cv2.resize(r, (width, height))
-
                         await websocket.send_text('adu;#;'+str(max_adu[0])+';#;'+str(max_adu[1])+';#;'+str(max_adu[2])) 
 
+                        # Send intensity and spectrum data for cropped images
                         if app.cameraController.cameraIsCropped() and not app.cameraController.isInColorMode():
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
+                    # Apply normalization if enabled
                     if app.cameraController.cameraIsNormalize():
                         r = cv2.normalize(r, dst=None, alpha=0, beta=256, norm_type=cv2.NORM_MINMAX)
 
-                    if False and not  app.cameraController.isRecording():
+                    #TODO : so false here .. never used ?
+                    if False and not app.cameraController.isRecording():
                         r = locateLines(r)
+
+                    # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()
                     file_64encoded = str(base64.b64encode(byte_im)  ).split('b\'')
                     bytes_to_sent = (file_64encoded[1])[:-1]
-                    
                     await websocket.send_text('camera;#;0;#;0;#;data:image/jpg;base64,'+bytes_to_sent )
                    
-                    
-            
+            # Adjust sleep time based on recording status
             if app.cameraController and app.cameraController.isRecording():
                 await asyncio.sleep(0.5)
             else:
@@ -344,4 +727,3 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print('Socket close.')
-
