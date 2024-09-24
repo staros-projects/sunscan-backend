@@ -1,23 +1,43 @@
-
 import numpy as np
 import cv2 as cv2
 
 
-def synth_spectrum (template, ratio_pix) :
-    h,w = template.shape[0], template.shape[1]
-    if ratio_pix !=1 :
-        template=cv2.resize(template, dsize=(w, int(h*0.5)), interpolation=cv2.INTER_LANCZOS4)
-        template=cv2.GaussianBlur(template,(5,1),cv2.BORDER_DEFAULT)
-    template=template[:,w//2-10:(w//2)+10]
-    moy=1*np.mean(template,1)
-    moy=np.array(moy, dtype='uint8')
-    vector_t= np.array([moy]).T
-    temp_r=np.tile(vector_t, (1,100))
+def synth_spectrum(template, ratio_pix):
+    """
+    Synthesize a spectrum from a template image.
+
+    Args:
+        template (numpy.ndarray): The input template image.
+        ratio_pix (float): The pixel ratio for resizing.
+
+    Returns:
+        numpy.ndarray: The synthesized spectrum.
+    """
+    h, w = template.shape[0], template.shape[1]
+    if ratio_pix != 1:
+        template = cv2.resize(template, dsize=(w, int(h*0.5)), interpolation=cv2.INTER_LANCZOS4)
+        template = cv2.GaussianBlur(template, (5, 1), cv2.BORDER_DEFAULT)
+    template = template[:, w//2-10:(w//2)+10]
+    moy = 1 * np.mean(template, 1)
+    moy = np.array(moy, dtype='uint8')
+    vector_t = np.array([moy]).T
+    temp_r = np.tile(vector_t, (1, 100))
 
     return temp_r
 
-def template_locate (img_r, temp_r) :
-    matched= cv2.matchTemplate(img_r, temp_r, cv2.TM_CCOEFF_NORMED)
+
+def template_locate(img_r, temp_r):
+    """
+    Locate the best match position of a template in an image.
+
+    Args:
+        img_r (numpy.ndarray): The input image.
+        temp_r (numpy.ndarray): The template to match.
+
+    Returns:
+        int: The y-coordinate of the best match.
+    """
+    matched = cv2.matchTemplate(img_r, temp_r, cv2.TM_CCOEFF_NORMED)
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(matched)
     return maxLoc[1]
 
@@ -52,9 +72,17 @@ thickness              = 1
 lineType               = cv2.LINE_AA
 
 def locateLines(frame):
+    """
+    Locate and annotate spectral lines in the given frame.
 
-    temp_r= synth_spectrum(frame, ratio_pix)
-    y_top = template_locate (img_r, temp_r)
+    Args:
+        frame (numpy.ndarray): The input frame to process.
+
+    Returns:
+        numpy.ndarray: The processed frame with annotated spectral lines.
+    """
+    temp_r = synth_spectrum(frame, ratio_pix)
+    y_top = template_locate(img_r, temp_r)
     y_bottom = y_top + frame.shape[0]
 
     lines = {k: v for k, v in atlas.items() if k in range(y_top, y_bottom)}

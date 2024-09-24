@@ -6,13 +6,40 @@ from pathlib import Path
 
 
 def get_directory_size(path='storage'):
+    """
+    Calculate the total size of a directory.
+
+    Args:
+        path (str): Path to the directory. Defaults to 'storage'.
+
+    Returns:
+        str: Formatted string representing the total size of the directory.
+    """
     p = Path(path)
     return sizeof_fmt(sum(f.stat().st_size for f in p.glob('**/*') if f.is_file()))
 
 def get_scan_count(path):
+    """
+    Get the count of scans in a directory.
+
+    Args:
+        path (str): Path to the directory containing scans.
+
+    Returns:
+        None: This function is not implemented yet.
+    """
     pass
 
 def get_data(path='storage/scans/'):
+    """
+    Generate HTML content for scan data.
+
+    Args:
+        path (str): Path to the scans directory. Defaults to 'storage/scans/'.
+
+    Returns:
+        str: HTML content displaying scan information and thumbnails.
+    """
     scans = get_scans(path)
     html = '<h1>SUNSCAN</h1>'
     for s in scans:
@@ -23,6 +50,15 @@ def get_data(path='storage/scans/'):
     return html
 
 def get_data2(path='storage/snapshots/'):
+    """
+    Generate HTML content for snapshot data.
+
+    Args:
+        path (str): Path to the snapshots directory. Defaults to 'storage/snapshots/'.
+
+    Returns:
+        str: HTML content displaying snapshot information and thumbnails.
+    """
     html = '<h1>SUNSCAN snapshots</h1>'
     for root, dirs, files in os.walk(path, topdown=False):
         for name in files:
@@ -97,6 +133,16 @@ def get_scans(path='storage/scans/', withDetails=False):
     
 
 def sizeof_fmt(num, suffix="b"):
+    """
+    Format a file size into a human-readable string.
+
+    Args:
+        num (int): The file size in bytes.
+        suffix (str): The suffix to use for the units. Defaults to "b".
+
+    Returns:
+        str: A formatted string representing the file size.
+    """
     for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
         if abs(num) < 1024.0:
             return f"{num:3.1f} {unit}{suffix}"
@@ -105,6 +151,15 @@ def sizeof_fmt(num, suffix="b"):
 
 
 def get_available_size(path="/"):
+    """
+    Get the available disk space for a given path.
+
+    Args:
+        path (str): The path to check for disk space. Defaults to "/".
+
+    Returns:
+        dict: A dictionary containing total, used, and free disk space in formatted strings.
+    """
     du = psutil.disk_usage(path)
     return {"total":sizeof_fmt(du.total),"used":sizeof_fmt(du.used),"free":sizeof_fmt(du.free)}
 

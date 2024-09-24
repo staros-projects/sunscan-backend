@@ -6,17 +6,25 @@ from datetime import datetime, timezone
 from pprint import *
 from threading import Condition, Thread
 
-
-
-try : 
+try:
     from serfilesreader import Serfile
-except: 
+except:
     from serfilesreader.serfilesreader import Serfile
 
-
-
 class CameraController:
-    def __init__(self, camera, path = 'storage/scans/', filename_prefix = 'sunscan', stream= 'main'):
+    """
+    A class to control camera operations, including recording and image processing.
+    """
+
+    def __init__(self, camera, path='storage/scans/', filename_prefix='sunscan', stream='main'):
+        """
+        Initialize the CameraController with given parameters.
+
+        :param camera: The camera object to control
+        :param path: Path to store recorded scans
+        :param filename_prefix: Prefix for recorded filenames
+        :param stream: Stream identifier
+        """
         self._gain = 1.0
         self._exposure_time = 110 * 1e3 # 160ms default
         self._crop = False
@@ -43,6 +51,9 @@ class CameraController:
         self._flat_enabled = False
 
     def _init(self):
+        """
+        Initialize camera settings and calculate crop parameters.
+        """
         self._sensor_size = self._camera.init()
         self._crop_height = 280
         self._crop_y = int((self._sensor_size[1] / 2) - (self._crop_height / 2))
@@ -50,23 +61,34 @@ class CameraController:
         self._preview_crop_y = int((self._sensor_size[1] / 2) - (self._preview_crop_height / 2))
         
     def _thread_func(self):  
-        print('thread cam ok')  
+        """
+        Main thread function for continuous camera capture.
+        """
+        print('Thread camera is running...')
         while(self._running):
-            self._frame = self._camera.capture(self._record, self._flat_enabled)
-            if not self.isInColorMode():
-                if self._record:
-                    if not self._serfile_object: 
-                        self._initSerFile()
-                        self._t0 = time.time()
-                    self._time_in_progress = time.time()
-                    self._serfile_object.addFrame(self._frame)
-                    self._fc+=1
+            self._frame = self._camera.capture(self._record, self._flat_enabled)  # Capture a frame from the camera
+            if not self.isInColorMode():  # Check if the camera is not in color mode
+                if self._record:  # Check if recording is active
+                    if not self._serfile_object:  # If SER file object doesn't exist
+                        self._initSerFile()  # Initialize a new SER file
+                        self._t0 = time.time()  # Set the start time for recording
+                    self._time_in_progress = time.time()  # Update the current time
+                    self._serfile_object.addFrame(self._frame)  # Add the captured frame to the SER file
+                    self._fc+=1  # Increment the frame count
 
        
     def isRecording(self):
+        """
+        Check if the camera is currently recording.
+
+        :return: Boolean indicating recording status
+        """
         return self._record
                 
     def start(self):
+        """
+        Start the camera controller thread and initialize camera.
+        """
         self._running = True
         self._thread = Thread(target=self._thread_func, daemon=True)
         self._init()
@@ -75,37 +97,77 @@ class CameraController:
         self._camera_status = "connected" 
     
     def isInColorMode(self):
+        """
+        Check if the camera is in color mode.
+
+        :return: Boolean indicating color mode status
+        """
         return not self._monobin
 
     def toggleColorMode(self):
+        """
+        Toggle between color and monochrome modes.
+        """
         self._monobin = not self._monobin
         self._camera.updateCameraControls(self.getCameraControls())
 
     def toggleFlat(self):
+        """
+        Toggle flat field correction.
+        """
         self._flat_enabled = not self._flat_enabled
         self._camera.updateCameraControls(self.getCameraControls())
 
     def toggleBin(self):
+        """
+        Toggle binning mode.
+        """
         self._bin = not self._bin
         self._camera.updateCameraControls(self.getCameraControls())
 
     def toggleMonoBinMode(self):
+        """
+        Cycle through monochrome binning modes (RGB, R, G, B).
+        """
         self._monobin_mode = (self._monobin_mode + 1) % 4
         self._camera.updateCameraControls(self.getCameraControls())
 
     def isInBinMode(self):
+        """
+        Check if binning mode is active.
+
+        :return: Boolean indicating binning mode status
+        """
         return self._bin
 
     def isFlatEnable(self):
+        """
+        Check if flat field correction is enabled.
+
+        :return: Boolean indicating flat field correction status
+        """
         return self._flat_enabled
 
     def getStatus(self):
+        """
+        Get the current camera status.
+
+        :return: String representing camera status
+        """
         return self._camera_status
 
     def getMaxADU(self):
+        """
+        Get the maximum ADU (Analog-to-Digital Unit) value of the camera.
+
+        :return: Maximum ADU value
+        """
         return self._camera.getMaxADU()
 
     def stop(self):
+        """
+        Stop the camera controller thread and release resources.
+        """
         self._running = False
         self._frame = None
         self._thread.join()
@@ -114,9 +176,19 @@ class CameraController:
         self._cropped_flat = []
 
     def getLastFrame(self):
+        """
+        Get the most recent captured frame.
+
+        :return: The last captured frame
+        """
         return self._frame
 
     def getCameraControls(self):
+        """
+        Get current camera control settings.
+
+        :return: Dictionary of camera control parameters
+        """
         c = { 'exposure_time': self._exposure_time, 
                 'normalize': self._normalize,
                 'gain': self._gain, 
@@ -134,30 +206,59 @@ class CameraController:
         return c
 
     def setCameraControls(self, controls):
+        """
+        Set camera control parameters.
+
+        :param controls: Object containing new control settings
+        """
         self._exposure_time = controls.exp * 1e3
         self._gain = controls.gain
         self._camera.updateCameraControls(self.getCameraControls())
 
     def resetControls(self):
+        """
+        Reset camera controls to default values.
+        """
         self._exposure_time = 100 * 1e3
         self._gain = 3.0
         self._camera.updateCameraControls(self.getCameraControls())
         
     def toggleCrop(self):
+        """
+        Toggle image cropping.
+        """
         self._crop = not self._crop
         self._camera.updateCameraControls(self.getCameraControls())
 
     def toggleNormalize(self):
+        """
+        Toggle image normalization.
+        """
         self._normalize = not self._normalize
         self._camera.updateCameraControls(self.getCameraControls())
 
     def cameraIsNormalize(self):
+        """
+        Check if image normalization is active.
+
+        :return: Boolean indicating normalization status
+        """
         return self._normalize
 
     def cameraIsCropped(self):
+        """
+        Check if image cropping is active.
+
+        :return: Boolean indicating cropping status
+        """
         return self.cameraIsCropped
 
     def setCropVerticalPosition(self, direction):
+        """
+        Adjust the vertical position of the crop area.
+
+        :param direction: String indicating 'up' or 'down' movement
+        """
         if direction =='up':
             self._crop_y -= 16
         else:
@@ -166,6 +267,9 @@ class CameraController:
         
 
     def startRecord(self):
+        """
+        Start recording frames.
+        """
         self._serfile_object = None
         self._fc = 1
         self._time_in_progress =0
@@ -173,31 +277,55 @@ class CameraController:
         self._record = True
 
     def stopRecord(self):
+        """
+        Stop recording frames and print recording statistics.
+        """
         self._record = False
         print(self._fc,self._time_in_progress,self._t0)
         print(f"frame count : {self._fc} time:{self._time_in_progress-self._t0} fps:{self._fc/(self._time_in_progress-self._t0)}")
 
     def _initSerFile(self):
+        """
+        Initialize a new SER file for recording frames.
+        """
+
+        # Generate timestamp and date strings for file naming
         timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
         date = time.strftime("%Y_%m_%d")
+        
+        # Create filename with prefix and timestamp
         filename = f"{self._filename_prefix}_{timestr}"
+        
+        # Create full path for the date directory
         full_path = os.path.join(self._path, date)
         if not os.path.exists(full_path):
             os.mkdir(full_path)
+        
+        # Add filename to the full path
         full_path = os.path.join(full_path, filename)
+        
+        # Set the final SER filename
         self._final_ser_filename = os.path.join(full_path, f"scan.ser")
+        
+        # Create the directory if it doesn't exist
         if not os.path.exists(full_path):
             os.mkdir(full_path)
+        
+        # Create a new Serfile object
         serfile_object = Serfile(self._final_ser_filename, NEW=True)
         fileid="SUNSCAN+IMX477"
         serfile_object.setFileID(fileid)
-        #Largeur, hauteur, nb de bits, nb de frame
+        
+        # Set image width and height
         Width=self._sensor_size[0]
         serfile_object.setImageWidth(Width)
         Height=self._sensor_size[1]
         serfile_object.setImageHeight(Height)
+        
+        # Set pixel depth per plane (16-bit)
         serfile_object.setPixelDepthPerPlane(16)
-        #observateur, Intrument, telescope
+        
+        # Set observer, instrument, and telescope information
         serfile_object.setObserver('')
         serfile_object.setInstrument('sunscan')
         serfile_object.setTelescope('sunscan')
@@ -205,7 +333,11 @@ class CameraController:
         ts = (datetime.now(timezone.utc).timestamp() * (10000000-0.17) )
         print('datetime utc ser: '+str(ts))
         serfile_object.setDateTimeUTC(int(ts))
+        
+        # Store the Serfile object
         self._serfile_object = serfile_object
+        
+        # Write camera controls to a configuration file
         with  open(os.path.join(full_path, 'sunscan_conf.txt'), "w") as logfile:
             logfile.writelines(json.dumps(self.getCameraControls()))
 

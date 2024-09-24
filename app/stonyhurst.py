@@ -1,18 +1,33 @@
-# -*- coding: utf-8 -*-
 """
 Created on Sat Dec 23 18:33:24 2023
 
 @author: valer
 """
-
 import numpy as np
 import matplotlib.pyplot as plt
-
 import cv2
 import math
 
 
 def draw_stonyhurst (nomrep1, nomrep2,nomfich, fich_param, graph_param):
+    """
+    Draw a Stonyhurst grid on a solar image.
+
+    This function overlays a Stonyhurst coordinate grid on a given solar image.
+    It uses the provided parameters to calculate and draw the grid lines,
+    including latitude and longitude lines, as well as adding labels and
+    other relevant information to the image.
+
+    Args:
+        nomrep1 (str): Directory path for the input image.
+        nomrep2 (str): Directory path for saving the output image.
+        nomfich (str): Filename of the input image.
+        fich_param (dict): Dictionary containing parameters for the image and solar position.
+        graph_param (dict): Dictionary containing parameters for grid appearance and display options.
+
+    Returns:
+        None. The function saves the resulting image with the Stonyhurst grid overlay.
+    """
     plt.close()
     nomfich_full=nomrep1+nomfich
     img = cv2.imread(nomfich_full) 
@@ -217,10 +232,3 @@ if __name__ == '__main__':
     graph_param['disp']=False                   # enable matplotlib display otherwise only png saved
     
     draw_stonyhurst(nomrep1, nomrep2,nom_fich, fich_param, graph_param)
-
-
-
-
-
-
-

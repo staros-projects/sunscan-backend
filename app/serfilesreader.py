@@ -126,6 +126,14 @@ class Serfile():
     """
     
     def __init__(self, name_of_serfile, NEW=False, header = None):
+        """
+        Initialize a new Serfile object.
+
+        Args:
+            name_of_serfile (str): The name of the SER file.
+            NEW (bool, optional): If True, create a new SER file. Defaults to False.
+            header (dict, optional): Header information for a new file. Defaults to None.
+        """
         self._nameOfSerfile = name_of_serfile
         
         self._debug = True
@@ -150,11 +158,24 @@ class Serfile():
         
     
     def dateFrameAtPos(self,n):
+        """
+        Get the date of the frame at the specified position.
+
+        Args:
+            n (int): The position of the frame.
+
+        Returns:
+            int: The date of the frame, or -1 if not available.
+        """
         return -1 if len(self._trail)==0 or n>(self.getLength()-1) else  self._trail[n]
     
     def readTrailFromHeader(self):
-        """read header and return a liste of dates: [date1, date2,..,date_n] Each date is the frame's date."""
-        
+        """
+        Read the trail (frame dates) from the SER file header.
+
+        Returns:
+            list: A list of frame dates.
+        """
         trail = []
         offset = self._header['ImageHeight'] * self._header['ImageWidth'] * self._header['FrameCount'] * self._bytesPerPixels + 178
         with open(self._nameOfSerfile, 'rb') as file:
@@ -165,23 +186,52 @@ class Serfile():
         return trail
     
     def getName():
+        """
+        Get the name of the SER file.
+
+        Returns:
+            str: The name of the SER file.
+        """
         return self._nameOfSerfile
     
     def quit(self):
+        """
+        Quit method.
+
+        Returns:
+            int: Always returns -1.
+        """
         return -1
     
     def testFile(self,fileToOpen):
+        """
+        Test if the specified file exists and can be opened.
+
+        Args:
+            fileToOpen (str): The path of the file to test.
+
+        Raises:
+            FileNotFoundError: If the file cannot be opened.
+        """
         with open(fileToOpen): pass
         
     def getHeader(self):
+        """
+        Get the SER file header.
+
+        Returns:
+            dict: A dictionary containing the SER file header information.
+        """
         return self._header
     
     def read(self):
-        """read a frame and move forward
-        In : None
-        
-        Out: frame, position
-        
+        """
+        Read a frame and move forward.
+
+        Returns:
+            tuple: A tuple containing:
+                - numpy.ndarray: The current frame.
+                - int: The new position after moving to the next frame.
         """
         frame = self.readFrameAtPos(self._cursor)
         ret = self.nextFrame()
@@ -321,12 +371,23 @@ class Serfile():
     
     
     def getCurrentFrame(self):
+        """
+        Get the current frame.
+
+        Returns:
+            numpy.ndarray: The current frame.
+        """
         return self.readFrameAtPos(self._cursor)
     
     def readFrameAtPos(self,n):
-        """return seek to offset 178 + n* self._frameDimension * self._bytesPerPixels bytes 
-        and return self._frameDimension * self._bytesPerPixels bytes. 
+        """
+        Read and return the frame at the specified position.
 
+        Args:
+            n (int): The position of the frame to read.
+
+        Returns:
+            numpy.ndarray: The frame at the specified position, or -1 if out of range.
         """
         if n<self._length : 
             with open(self._nameOfSerfile, 'rb') as file:
@@ -343,18 +404,51 @@ class Serfile():
         return -1
     
     def getLength(self):
+        """
+        Get the number of frames in the SER file.
+
+        Returns:
+            int: The number of frames, or -1 if not available.
+        """
         return self._header.get('FrameCount', -1)
     
     def getWidth(self):
+        """
+        Get the width of a frame.
+
+        Returns:
+            int: The width of a frame, or -1 if not available.
+        """
         return self._header.get('ImageWidth', -1)
     
     def getHeight(self):
+        """
+        Get the height of a frame.
+
+        Returns:
+            int: The height of a frame, or -1 if not available.
+        """
         return self._header.get('ImageHeight', -1)
     
     def getCurrentPosition(self):
+        """
+        Get the current cursor position.
+
+        Returns:
+            int: The current cursor position.
+        """
         return self._cursor
     
     def setCurrentPosition(self, n):
+        """
+        Set the cursor to the specified position.
+
+        Args:
+            n (int): The position to set the cursor to.
+
+        Returns:
+            int: The new cursor position.
+        """
         #TODO test with type else return -1
         self._cursor = n
         try: #when reading, frames exists. So can be read. But when creating a frame, cursor is updated, without a frame that cause an error
@@ -363,6 +457,12 @@ class Serfile():
         return self._cursor
     
     def createFitsHeader(self):
+        """
+        Create a FITS header for the current frame.
+
+        Returns:
+            astropy.io.fits.Header: The created FITS header.
+        """
         hdr= fits.Header()
         hdr['SIMPLE']='T'
         hdr['BITPIX']=32
@@ -377,6 +477,17 @@ class Serfile():
         return hdr
     
     def saveFit(self, filename):
+        """
+        Save the current frame as a FITS file.
+
+        Args:
+            filename (str): The name of the file to save.
+
+        Returns:
+            tuple: A tuple containing:
+                - bool: True if the save was successful, False otherwise.
+                - str: The filename of the saved file.
+        """
         #TODO use of astropyio https://docs.astropy.org/en/stable/io/fits/
         if not 'fit' in filename.split('.')[-1].lower() : 
             filename+='.fit'
@@ -389,6 +500,17 @@ class Serfile():
         return True, filename
     
     def savePng(self, filename):
+        """
+        Save the current frame as a PNG file.
+
+        Args:
+            filename (str): The name of the file to save.
+
+        Returns:
+            tuple: A tuple containing:
+                - bool: True if the save was successful, False otherwise.
+                - str: The filename of the saved file.
+        """
         if not 'png' in filename.split('.')[-1].lower() : 
             filename+='.png'
         #On 16 bits, it possible to have somme issue. So theses lines transform 16bits in 8 bits.
@@ -400,17 +522,45 @@ class Serfile():
         return self._savePng_cv2(filename, datas)
     
     def _savePng_python(self, filename, datas): #2 min for 3800 pictures
+        """
+        Save the frame as PNG using pure Python (not currently used).
+
+        Args:
+            filename (str): The name of the file to save.
+            datas (numpy.ndarray): The image data to save.
+
+        Returns:
+            tuple: A tuple containing:
+                - bool: True if the save was successful, False otherwise.
+                - str: The filename of the saved file.
+        """
         #TODO : Doesn't work
         png.from_array(datas, 'L').save(filename)
 
 
     def _savePng_cv2(self, filename, datas): #8 seconds for 3800 pictures
-        """save currentFrame in a PNG file"""
+        """
+        Save the frame as PNG using OpenCV.
+
+        Args:
+            filename (str): The name of the file to save.
+            datas (numpy.ndarray): The image data to save.
+
+        Returns:
+            tuple: A tuple containing:
+                - bool: True if the save was successful, False otherwise.
+                - str: The filename of the saved file.
+        """
         #TODO : find a pythonic way to do
         return cv2.imwrite(filename, datas), filename
     
     def nextFrame(self):
-        """add one to cursor. return actual frame position. -1 if nothing can be done"""
+        """
+        Move to the next frame.
+
+        Returns:
+            int: The new cursor position, or -1 if at the end of the file.
+        """
         if self._cursor<self._length : 
             self.setCurrentPosition(self._cursor+1)
         else : 
@@ -418,7 +568,12 @@ class Serfile():
         return self._cursor
     
     def previousFrame(self):
-        """remove one to cursor. return actual frame position. -1 if nothing can be done"""
+        """
+        Move to the previous frame.
+
+        Returns:
+            int: The new cursor position, or -1 if at the beginning of the file.
+        """
         if self._cursor>0 : 
             self.setCurrentPosition(self._cursor-1)
         else : 
@@ -477,7 +632,13 @@ class Serfile():
 
     
     def _updateHeader(self, key, value):
-        """update header and read it again to verify consistency"""
+        """
+        Update a specific field in the SER file header.
+
+        Args:
+            key (str): The header field to update.
+            value: The new value for the header field.
+        """
         keys_offset = {'FileID':(0,'uint8',14,True),
                        'LuID':(14, 'uint32', 1, False),
                        'ColorID':(18,'uint32',1,False ),
@@ -516,13 +677,15 @@ class Serfile():
                 self._frameDimension = self._height * self._width
     
     def createFitsHeaderFromFitsFile(fitsFile):
-        """read fits header and fill a new SER header with it
-        
-        In : a string containing fits file to read
-        
-        Out: header built.
         """
-        
+        Create a SER header from a FITS file.
+
+        Args:
+            fitsFile (str): The path to the FITS file.
+
+        Returns:
+            dict: A dictionary containing the created SER header information.
+        """
         hdul = fits.open(fitsFile)
         self.createNewHeader()
         self._updateHeader('DateTime', hdul[0].header['DATE'])
@@ -540,13 +703,15 @@ class Serfile():
         
     
     def addFrame(self, frame):
-        """add frame, add one to length. If it is the first frame, set height and width and frame_dimension
-        In : numpy array containing datas
         """
-        #try : 
-            #self._frameDimension
-        #except : 
-            #self._frameDimension=
+        Add a new frame to the SER file.
+
+        Args:
+            frame (numpy.ndarray): The frame to add.
+
+        Raises:
+            IndexError: If the frame dimensions do not match the existing frames.
+        """
         try : 
             if self._header['FrameCount']==0 : #first frame
                 self._updateHeader('ImageHeight',frame.shape[0])
@@ -567,53 +732,70 @@ class Serfile():
             
     
     def setImageHeight(self, height):
+        """Set the image height in the header."""
         self._updateHeader('ImageHeight',height)
     
     def setImageWidth(self, width):
+        """Set the image width in the header."""
         self._updateHeader('ImageWidth',width)
         
     def setObserver(self, observer):
+        """Set the observer in the header."""
         self._updateHeader('Observer',observer)
         
     def setTelescope(self, telescope):
+        """Set the telescope in the header."""
         self._updateHeader('Telescope',telescope)
         
     def setInstrument(self, instrument):
+        """Set the instrument in the header."""
         self._updateHeader('Instrument',instrument)
         
     def setDateTime(self, datetime):
+        """Set the date and time in the header."""
         self._updateHeader('DateTime',datetime)
         
     def setDateTimeUTC(self, datetimeutc):
+        """Set the UTC date and time in the header."""
         self._updateHeader('DateTimeUTC',datetimeutc)
         
     def setFileID(self, fileid):
+        """Set the file ID in the header."""
         self._updateHeader('FileID',fileid)
         
     def setLuID(self,luid):
+        """Set the LuID in the header."""
         self._updateHeader('LuID',luid)
         
     def setColorID(self,colorid):
+        """Set the color ID in the header."""
         self._updateHeader('ColorID',colorid)
         
     def setPixelDepthPerPlane(self, pixeldepthperplace):
+        """Set the pixel depth per plane in the header."""
         self._updateHeader('PixelDepthPerPlane',pixeldepthperplace)
         self._header, readOk, trail = self._readExistingHeader()   
         
     def setLittleEndian(self, littleendian):
+        """Set the little endian flag in the header."""
         self._updateHeader('ImageWidth',littleendian)
         self._header, readOk, trail = self._readExistingHeader()   
-        
+
+
+# Function to extract PNG images from a SER file
 @time_it
 def extract_png(serfile):
     for i in range(serfile.getLength()):
+        # Save each frame as a PNG file
         serfile.savePng(sys.argv[2].split('.')[0]+str(i)+'.png')
         serfile.nextFrame()
     print("extracted %s frames"%(serfile.getLength()))
           
+# Function to extract FIT images from a SER file
 @time_it
 def extract_fit(serfile):
     for i in range(serfile.getLength()):
+        # Save each frame as a FIT file
         serfile.saveFit(sys.argv[2].split('.')[0]+str(i)+'.fit')
         serfile.nextFrame()
     print("extracted %s frames"%(serfile.getLength()))
@@ -622,14 +804,19 @@ if __name__ == "__main__":
     # execute only if run as a script
     import sys
     print("usage : setfilesreader.py -f file.ser")
+    
+    # Flags for different operations
     extract_png_flag = False
     extract_fit_flag = False
     save_png_flag = False
     save_fit_flag = False
     new_ser_flag = False
+    
     if len(sys.argv)==3 : 
         print("file read : ", sys.argv[2])
         fichier_ser = Serfile(sys.argv[2])
+        
+        # Print various information about the SER file
         print('header', fichier_ser.getHeader())
         print('length', fichier_ser.getLength())
         print('width', fichier_ser.getWidth())
@@ -640,31 +827,35 @@ if __name__ == "__main__":
         print('saving fit', fichier_ser.saveFit("try_fit100.fit"))
         print('saving png',fichier_ser.savePng("try_fit100.png"))
 
-
+        # Save a specific frame as PNG
         if save_png_flag :
             n = 900
             fichier_ser.setCurrentPosition(n)
             fichier_ser.savePng(sys.argv[2].split('.')[0]+str(n)+'.png')
             
+        # Save a specific frame as FIT
         if save_fit_flag :
             n = 800
             fichier_ser.setCurrentPosition(n)
             fichier_ser.saveFit(sys.argv[2].split('.')[0]+str(n)+'.fit')
         
+        # Extract all frames as PNG
         if extract_png_flag : ##Long...
             extract_png(fichier_ser)
                 
+        # Extract all frames as FIT
         if extract_fit_flag : 
              extract_fit(fichier_ser)
         
+    # Create a new SER file
     if new_ser_flag : 
         serfile_ = Serfile("try_ser.ser", NEW=True)
-        #test purpose####
+
         header = {'FileID': 'LUCAM-RECORDER', 'LuID': 0, 'ColorID': 0, 'LittleEndian': 0, 'ImageWidth': 88, 'ImageHeight': 896, 'PixelDepthPerPlane': 16, 'FrameCount': 3884, 'Observer': 'SHELYAK', 'Instrument': 'ASI=ZWO ASI290MM Minitemp=32.0', 'Telescope': 'fps=80.00gain=30exp=0.38', 'DateTime': 637425855694020000, 'DateTimeUTC': 637425855693860000}
-        #################
+        
+        # Create and set header information
         serfile_.createNewHeader()
         serfile_.setImageWidth(100)
-        
         serfile_.setObserver("SHELYAK")
         serfile_.setTelescope("fps=80.00gain=30exp=0.38")
         serfile_.setInstrument("ASI=ZWO ASI290MM Minitemp=32.0")
@@ -678,13 +869,16 @@ if __name__ == "__main__":
         serfile_.setImageHeight(100)
         serfile_.setImageWidth(100)
         
-        #adding frames : 30 black square 100x100, 30 whit square
+        # Create black and white frames
+        #(adding frames : 30 black square 100x100, 30 whit square)
         frame_b = np.ones(10000, dtype=np.uint16)
         frame_b = frame_b.reshape(100,100)
         frame_w = np.ones(10000, dtype=np.uint16)*(2**16-1)
         frame_w = frame_w.reshape(100,100)
         
         print('date of 1st frame', serfile_.dateFrameAtPos(1))
+        
+        # Add alternating black and white frames
         for i in range(40):
             for i in range(100):
                 serfile_.addFrame(frame_b)
@@ -692,4 +886,3 @@ if __name__ == "__main__":
                 serfile_.addFrame(frame_w)
 
         print(serfile_.getHeader())
-    
