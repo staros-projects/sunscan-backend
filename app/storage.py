@@ -30,8 +30,35 @@ def get_data2(path='storage/snapshots/'):
                 html += '<a href="/'+os.path.join(root, name)+'" target="_blank">'+os.path.join(root, name)+'<br><img src="/'+os.path.join(root, name)+'" width="200"/></a><br><br>'
     return html
 
-def get_scans(path='storage/scans/'):
+def get_single_scan(path):
+    base = os.path.dirname(path)
+    print(base)
+    return get_scans(base, True)[0]
+
+def get_paginated_scans(page: int = 1, size: int = 2):
+    all_files = get_scans()
+    total_files = len(all_files)
+    
+    start = (page - 1) * size
+    end = start + size
+
+    if start >= total_files:
+        return {"total":total_files, "scans":[]}
+
+    paginated_files = all_files[start:end]
+
+    return {"total":total_files, "scans":paginated_files}
+
+def get_scans(path='storage/scans/', withDetails=False):
     scans = []
+    images_type = {'clahe':'Clahe + Unsharp mask',
+                    'protus':'Artificial eclipse : Clahe + Unsharp mask',
+                    'cont':'Continuum : Clahe + Unsharp mask',
+                    'doppler':'Doppler',
+                    'clahe_colour':'Clahe + Unsharp mask + Halpha colorization',
+                    'clahe_colour_caII':'Clahe + Unsharp mask + Ca II colorization',
+                    'raw':  'Raw'}
+
     for root, dirs, files in os.walk(path, topdown=False):
         for name in files:
             if name == "scan.ser":
@@ -42,20 +69,12 @@ def get_scans(path='storage/scans/'):
                     cti = int(os.path.getmtime(ser_path))
 
                     images = {}
-                    images_type = {
-                        'clahe':'Clahe + Unsharp mask',
-                        'protus':'Artificial eclipse : Clahe + Unsharp mask',
-                        'cont':'Continuum : Clahe + Unsharp mask',
-                        'doppler':'Doppler',
-                        'clahe_colour':'Clahe + Unsharp mask + Halpha colorization',
-                        'clahe_colour_caII':'Clahe + Unsharp mask + Ca II colorization',
-                        'raw':  'Raw'
-                    }
-                    
-                    for im, im_desc in images_type.items():
-                        p = os.path.join(ser_dirname,'sunscan_'+im+'.jpg')
-                        ti_m = os.path.getmtime(path)
-                        images[im] = [im_desc, os.path.exists(p), ti_m]
+
+                    if withDetails:  
+                        for im, im_desc in images_type.items():
+                            p = os.path.join(ser_dirname,'sunscan_'+im+'.jpg')
+                            ti_m = os.path.getmtime(path)
+                            images[im] = [im_desc, os.path.exists(p), ti_m]
                                 
                     scans.append({'path':ser_dirname, 'ser':ser_path, 'images':images, 'status':'pending', 'creation_date':cti})
     scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)

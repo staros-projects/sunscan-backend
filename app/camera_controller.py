@@ -189,7 +189,7 @@ class CameraController:
         if not os.path.exists(full_path):
             os.mkdir(full_path)
         serfile_object = Serfile(self._final_ser_filename, NEW=True)
-        fileid="SUNSCAN+IMX219"
+        fileid="SUNSCAN+IMX477"
         serfile_object.setFileID(fileid)
         #Largeur, hauteur, nb de bits, nb de frame
         Width=self._sensor_size[0]
@@ -202,7 +202,8 @@ class CameraController:
         serfile_object.setInstrument('sunscan')
         serfile_object.setTelescope('sunscan')
         # date et date UTC
-        ts =  datetime.now(timezone.utc).timestamp()
+        ts = (datetime.now(timezone.utc).timestamp() * (10000000-0.17) )
+        print('datetime utc ser: '+str(ts))
         serfile_object.setDateTimeUTC(int(ts))
         self._serfile_object = serfile_object
         with  open(os.path.join(full_path, 'sunscan_conf.txt'), "w") as logfile:

@@ -124,6 +124,7 @@ class IMX477Camera_CSI():
         
         self._cameraControls = Controls(self._picam2)
         self._cameraControls.AeEnable = 0 if options['monobin'] else 1
+        #self._cameraControls.AeConstraintMode = controls.AeConstraintModeEnum.Highlight 
         self._cameraControls.AwbEnable = False
         self._cameraControls.FrameDurationLimits = (int(150*1e3),60000000)
         self._cameraControls.ExposureTime = int(options['exposure_time'])

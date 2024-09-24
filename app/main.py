@@ -148,8 +148,8 @@ async def connect(request: Request):
     return JSONResponse(content=jsonable_encoder(du | version))
 
 @app.get("/sunscan/scans", response_class=JSONResponse)
-async def connect(request: Request):
-    scans = get_scans()
+async def paginated_scans(page: int = 1, size: int = 10):
+    scans = get_paginated_scans(page, size)
     return JSONResponse(content=jsonable_encoder(scans))
 
 @app.get("/camera/imx477/connect", response_class=JSONResponse)
@@ -274,6 +274,11 @@ async def deleteScan(scan:Scan, background_tasks: BackgroundTasks):
         print(f"The directory {scan.filename} has been deleted.")
     else:
         print(f"The directory {scan.filename} does not exist.")
+
+@app.post("/sunscan/scan", response_class=JSONResponse)
+async def getScanDetails(scan:Scan, request: Request):
+    scans = get_single_scan(scan.filename)
+    return JSONResponse(content=jsonable_encoder(scans))
 
 @app.post("/sunscan/scan/process/", response_class=JSONResponse)
 async def processScan(scan:Scan, background_tasks: BackgroundTasks):
