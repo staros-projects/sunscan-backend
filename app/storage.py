@@ -71,7 +71,7 @@ def get_single_scan(path):
     print(base)
     return get_scans(base, True)[0]
 
-def get_paginated_scans(page: int = 1, size: int = 2):
+def get_paginated_scans(page: int = 1, size: int = 20):
     all_files = get_scans()
     total_files = len(all_files)
     
