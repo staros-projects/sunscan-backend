@@ -72,20 +72,15 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     try:
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
-        
         # Create and save surface image
         create_surface_image(WorkDir, frames)
-        
         # Create and save continuum image
         create_continuum_image(WorkDir, frames)
-        
         # Create and save prominence (protus) image
         create_protus_image(WorkDir, frames, cercle)
-        
         # If doppler contrast is enabled, create and save doppler image
         if dopcont:
             create_doppler_image(WorkDir, frames)
-        
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except:
@@ -120,7 +115,6 @@ def sharpenImage(image):
     # Sharpen the image one more time
     image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
-
 
 def create_surface_image(wd, frames):
     """
@@ -159,7 +153,7 @@ def create_surface_image(wd, frames):
     cl1 = clahe.apply(frames[0])
     
     # Calculate new thresholds for CLAHE image
-    Seuil_bas=np.percentile(cl1, 45)
+    Seuil_bas=np.percentile(cl1, 50)
     Seuil_haut=np.percentile(cl1,99.9999)*1.05
 
     # Apply thresholds and scale to 16-bit range
@@ -173,7 +167,7 @@ def create_surface_image(wd, frames):
 
     # Apply sharpening to the image
     cc = sharpenImage(cc)
-
+   
     # Save CLAHE image as PNG and JPG
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'),cc/256)
@@ -181,56 +175,9 @@ def create_surface_image(wd, frames):
     ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
     cv2.imwrite(os.path.join(wd, 'sunscan_preview.jpg'),ccsmall)
     print(os.path.join(wd, 'sunscan_preview.jpg'))
-    # Create a copy of the CLAHE image
-    cc_ori = cc.copy()
 
-    # -- H-alpha processing --
-    gamma_weight = 0.8
-    gamma = 1.0
-    # Apply gamma correction
-    im = gamma_weight * np.power(cc, gamma) + (1.0 - gamma_weight) * (1.0 - np.power(1.0 - cc, 1.0 / gamma))
-    im = im.astype(np.float32) / 65535.0
-    # Create RGB channels with different gamma values
-    rgb = (np.power(im, 3.8), np.power(im, 1.25), np.power(im, 0.4))
-    im = cv2.merge(rgb)
-    im = (im * 65535).astype(np.uint16)
+    Colorise_Image('auto', cc, wd)
 
-    # Apply thresholds to H-alpha image
-    Seuil_bas=np.percentile(im, 50)
-    Seuil_haut=np.percentile(im,99.9999)*1.30
-
-    cc=(im-Seuil_bas)*(65000/(Seuil_haut-Seuil_bas))
-    cc[cc<0]=0
-    cc=np.array(cc, dtype='uint16')
-    # Save H-alpha images
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_colour.png'),im)
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_colour.jpg'),im/256)
-    ccsmall = cv2.resize(im/256,  (0,0), fx=0.4, fy=0.4) 
-    cv2.imwrite(os.path.join(wd, 'sunscan_colour_preview.jpg'),ccsmall)
-
-    # -- Ca II K processing --
-    gamma_weight = 0.8
-    gamma = 1.0
-    # Apply gamma correction
-    im = gamma_weight * np.power(cc_ori, gamma) + (1.0 - gamma_weight) * (1.0 - np.power(1.0 - cc_ori, 1.0 / gamma))
-    im = im.astype(np.float32) / 65535.0
-    # Create RGB channels with different gamma values
-    rgb = (np.power(im, 1.0), np.power(im, 2.0), np.power(im, 1.2))
-    im = cv2.merge(rgb)
-    im = (im * 65535).astype(np.uint16)
-
-    # Apply thresholds to Ca II K image
-    Seuil_bas=np.percentile(im, 50)
-    Seuil_haut=np.percentile(im,99.9999)*1.30
-
-    cc=(im-Seuil_bas)*(65000/(Seuil_haut-Seuil_bas))
-    cc[cc<0]=0
-    cc=np.array(cc, dtype='uint16')
-    # Save Ca II K images
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_colour_caII.png'),im)
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_colour_caII.jpg'),im/256)
-    ccsmall = cv2.resize(im/256,  (0,0), fx=0.4, fy=0.4) 
-    cv2.imwrite(os.path.join(wd, 'sunscan_colour_caII_preview.jpg'),ccsmall)
 
 def create_continuum_image(wd, frames):
     """
@@ -437,5 +384,217 @@ def get_lum_moyenne(img):
     return lum_roi
 
 
+def Colorise_Image (couleur_lbl, frame_contrasted, wd):
+    # gestion couleur auto ou sur dropdown database compatibility
+    # 'Manual','Ha','Ha2cb','Cah','Cah1v','Cak','Cak1v','HeID3'
+    if couleur_lbl == 'auto' :
+        couleur = 'on' # mode detection auto basé sur histogramme simple
+    else :
+        if couleur_lbl[:2] == 'Ha' :
+            couleur='H-alpha'
+        if couleur_lbl[:3] == 'Ha2' :
+            couleur='Pale'
+        if couleur_lbl[:2] == 'Ca' :
+            couleur='Calcium'
+        if couleur_lbl[:2] == 'He' :
+            couleur='Pale'
+    
+    f=frame_contrasted/256
+    f_8=f.astype('uint8')
+    
+    #hist = cv2.calcHist([f_8],[0],None,[256],[10,256])
+    # separe les 2 pics fond et soleil
+    th_otsu,img_binarized=cv2.threshold(f_8, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    hist = cv2.calcHist([f_8],[0],None,[256],[0,256])
+    hist[0:int(th_otsu)]=0
+    pos_max=np.argmax(hist)
+    """
+    plt.plot(hist)
+    plt.show()
+    print('couleur : ',pos_max)
+    """
+    
+    # test ombres >> provoque des applats 
+    ombres=False
+    if ombres :
+        
+        i_low=[]
+        i_hi=[]
+        fr=np.copy(frame_contrasted)
+        i_low=np.array((fr<(pos_max*256))*fr*1.01, dtype='uint16')
+        i_hi=(fr>=pos_max)*fr
+        fr=i_low+i_hi
+        f=fr/256
+        f_8=f.astype('uint8')
+    
+    
+    if couleur =='on' :  
+        if pos_max<200 and pos_max>=70 :
+            couleur="H-alpha"
+        if pos_max<70 :
+            couleur="Calcium"
+        if pos_max>=200 :
+            couleur="Pale"
+
+    
+    # test ombres >> provoque des applats 
+    ombres=False
+    if ombres :
+        f8_low=[]
+        f8_hi=[]
+        f8_low=np.array((f_8<pos_max)*f_8*1.05, dtype='uint8')
+        f8_hi=(f_8>=pos_max)*f_8
+        f_8=f8_low+f8_hi
+    
+    
+    
+    if couleur != '' :
+        # image couleur en h-alpha
+        if couleur == 'H-alpha' :
+            # build a lookup table mapping the pixel values [0, 255] to
+            # their adjusted gamma values
+            gamma=0.3   # was gam 1.3 > 0.3 ok un peu plus clair et 0.1 plus sombre sombre
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f1_gam= cv2.LUT(f_8, table)
+            
+            gamma=0.55 # was gam 0.5 - 0.3 trop rouge, 0.6 un peu jaune - 0.55 ok
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f2_gam= cv2.LUT(f_8, table)
+            
+            gamma=1 # gam is 1.0
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f3_gam= cv2.LUT(f_8, table)
+            
+            i1=(f1_gam*0.1).astype('uint8')     # was 0.05 - 1 trop pale - 0.1 ok
+            i2=(f2_gam*1).astype('uint8')       # is 1
+            i3=(f3_gam*1).astype('uint8')       # is 1
+            
+            gamma=1.5 # gam total image 2 est trop fade, 1.2 pas assez, 1.5 pas mal
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            i1= cv2.LUT(i1, table)
+            i2= cv2.LUT(i2, table)
+            i3= cv2.LUT(i3, table)
+            
+            img_color=np.zeros([frame_contrasted.shape[0], frame_contrasted.shape[1], 3],dtype='uint8')
+            img_color[:,:,0] = np.array(i1, dtype='uint8') # blue
+            img_color[:,:,1] = np.array(i2, dtype='uint8') # blue
+            img_color[:,:,2] = np.array(i3, dtype='uint8') # blue
+            
+
+            
+        # image couleur en calcium
+        if couleur == 'Calcium' :
+            # build a lookup table mapping the pixel values [0, 255] to
+            # their adjusted gamma values
+            gamma=1.2  # was 1
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f1_gam= cv2.LUT(f_8, table)
+            
+            gamma=1 # was 0.8
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f2_gam= cv2.LUT(f_8, table)
+            
+            gamma=1 # was 0.8
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f3_gam= cv2.LUT(f_8, table)
+            
+            # i1: bleu, i2: vert, i3:rouge
+            i1=(f1_gam*1).astype('uint8')     # was 0.05 - 1 trop pale - 0.1 ok
+            i2=(f2_gam*0.7).astype('uint8')       # is 1
+            i3=(f3_gam*0.7).astype('uint8')       # was 0.8 un peu trop violet
+            
+            gamma=1 # gam total image finalement aucun, 1.2 un peu fade
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            i1= cv2.LUT(i1, table)
+            i2= cv2.LUT(i2, table)
+            i3= cv2.LUT(i3, table)
+            
+            img_color=np.zeros([frame_contrasted.shape[0], frame_contrasted.shape[1], 3],dtype='uint8')
+            img_color[:,:,0] = np.array(i1, dtype='uint8') # blue
+            img_color[:,:,1] = np.array(i2, dtype='uint8') # green
+            img_color[:,:,2] = np.array(i3, dtype='uint8') # red
+            
+            vp=np.percentile(f_8, 99.7)
+            alpha=(255//2)/(vp*0.5)
+      
+            img_color=cv2.convertScaleAbs(img_color, alpha=alpha) # was 1.5 ok
+            
+
+        # image couleur en jaune-orange (helium, sodium, continuum)
+        if couleur == 'Pale' :
+            # build a lookup table mapping the pixel values [0, 255] to
+            # their adjusted gamma values
+            gamma=1  # 
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f1_gam= cv2.LUT(f_8, table)
+            
+            gamma=1 # was 0.7
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f2_gam= cv2.LUT(f_8, table)
+            
+            gamma=1 # 
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            f3_gam= cv2.LUT(f_8, table)
+            
+            # i1: bleu, i2: vert, i3:rouge
+            i1=(f1_gam*0.92).astype('uint8')     # was 0.5 
+            i2=(f2_gam*0.98).astype('uint8')       # was 0.9
+            i3=(f3_gam*1).astype('uint8')       # is 1
+            
+            gamma=0.5 # gam total image 1 trop fade, 0.7 pas mal
+            invGamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** invGamma) * 255
+            for i in np.arange(0, 256)]).astype("uint8")
+                # apply gamma correction using the lookup table
+            i1= cv2.LUT(i1, table)
+            i2= cv2.LUT(i2, table)
+            i3= cv2.LUT(i3, table)
+            
+                
+            img_color=np.zeros([frame_contrasted.shape[0], frame_contrasted.shape[1], 3],dtype='uint8')
+            img_color[:,:,0] = np.array(i1, dtype='uint8') # blue
+            img_color[:,:,1] = np.array(i2, dtype='uint8') # green
+            img_color[:,:,2] = np.array(i3, dtype='uint8') # red
+            
+        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.png'),img_color)
+        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),img_color)
+        return img_color
+    
+
+def mock_callback(serfile, status):
+    print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("C:\\Users\\g-ber\\Documents\\ASTRO\\sunscan\\ser\\scan_gbertrand_good_20240706.ser", lambda x:x)
+    process_scan("C:\\Users\\g-ber\\Downloads\\scan-2024_09_21-16_21_59.ser", mock_callback, False, True, 1300)
