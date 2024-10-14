@@ -446,21 +446,19 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
         f8_hi=(f_8>=pos_max)*f_8
         f_8=f8_low+f8_hi
     
-    
-    
     if couleur != '' :
         # image couleur en h-alpha
         if couleur == 'H-alpha' :
             # build a lookup table mapping the pixel values [0, 255] to
             # their adjusted gamma values
-            gamma=0.3   # was gam 1.3 > 0.3 ok un peu plus clair et 0.1 plus sombre sombre
+            gamma=0.05   # was gam 1.3 > 0.3 ok un peu plus clair et 0.1 plus sombre sombre
             invGamma = 1.0 / gamma
             table = np.array([((i / 255.0) ** invGamma) * 255
             for i in np.arange(0, 256)]).astype("uint8")
                 # apply gamma correction using the lookup table
             f1_gam= cv2.LUT(f_8, table)
             
-            gamma=0.55 # was gam 0.5 - 0.3 trop rouge, 0.6 un peu jaune - 0.55 ok
+            gamma=0.45 # was gam 0.5 - 0.3 trop rouge, 0.6 un peu jaune - 0.55 ok
             invGamma = 1.0 / gamma
             table = np.array([((i / 255.0) ** invGamma) * 255
             for i in np.arange(0, 256)]).astype("uint8")
@@ -471,10 +469,10 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             invGamma = 1.0 / gamma
             table = np.array([((i / 255.0) ** invGamma) * 255
             for i in np.arange(0, 256)]).astype("uint8")
-                # apply gamma correction using the lookup table
+            # apply gamma correction using the lookup table
             f3_gam= cv2.LUT(f_8, table)
             
-            i1=(f1_gam*0.1).astype('uint8')     # was 0.05 - 1 trop pale - 0.1 ok
+            i1=(f1_gam*1).astype('uint8')     # was 0.05 - 1 trop pale - 0.1 ok
             i2=(f2_gam*1).astype('uint8')       # is 1
             i3=(f3_gam*1).astype('uint8')       # is 1
             
@@ -523,15 +521,6 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             i1=(f1_gam*1).astype('uint8')     # was 0.05 - 1 trop pale - 0.1 ok
             i2=(f2_gam*0.7).astype('uint8')       # is 1
             i3=(f3_gam*0.7).astype('uint8')       # was 0.8 un peu trop violet
-            
-            gamma=1 # gam total image finalement aucun, 1.2 un peu fade
-            invGamma = 1.0 / gamma
-            table = np.array([((i / 255.0) ** invGamma) * 255
-            for i in np.arange(0, 256)]).astype("uint8")
-                # apply gamma correction using the lookup table
-            i1= cv2.LUT(i1, table)
-            i2= cv2.LUT(i2, table)
-            i3= cv2.LUT(i3, table)
             
             img_color=np.zeros([frame_contrasted.shape[0], frame_contrasted.shape[1], 3],dtype='uint8')
             img_color[:,:,0] = np.array(i1, dtype='uint8') # blue
@@ -589,6 +578,7 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             img_color[:,:,1] = np.array(i2, dtype='uint8') # green
             img_color[:,:,2] = np.array(i3, dtype='uint8') # red
             
+        #img_color = cv2.normalize(img_color, dst=None, alpha=0, beta=256, norm_type=cv2.NORM_MINMAX)
         cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.png'),img_color)
         cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),img_color)
         return img_color
@@ -597,4 +587,4 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("C:\\Users\\g-ber\\Downloads\\scan-2024_09_21-16_21_59.ser", mock_callback, False, True, 1300)
+    process_scan("C:\\Users\\g-ber\\Downloads\\scan(6).ser", mock_callback, False, True, 1300)
