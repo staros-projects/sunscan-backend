@@ -423,8 +423,6 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             couleur="H-alpha"
         if pos_max<70 :
             couleur="Calcium"
-        if pos_max>=200 :
-            couleur="Pale"
     
     if couleur != '' :
         # image couleur en h-alpha
@@ -460,52 +458,6 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
             cc[cc<0]=0
             img_color=cc
-
-        # image couleur en jaune-orange (helium, sodium, continuum)
-        if couleur == 'Pale' :
-            # build a lookup table mapping the pixel values [0, 255] to
-            # their adjusted gamma values
-            gamma=1  # 
-            invGamma = 1.0 / gamma
-            table = np.array([((i / 255.0) ** invGamma) * 255
-            for i in np.arange(0, 256)]).astype("uint8")
-                # apply gamma correction using the lookup table
-            f1_gam= cv2.LUT(f_8, table)
-            
-            gamma=1 # was 0.7
-            invGamma = 1.0 / gamma
-            table = np.array([((i / 255.0) ** invGamma) * 255
-            for i in np.arange(0, 256)]).astype("uint8")
-                # apply gamma correction using the lookup table
-            f2_gam= cv2.LUT(f_8, table)
-            
-            gamma=1 # 
-            invGamma = 1.0 / gamma
-            table = np.array([((i / 255.0) ** invGamma) * 255
-            for i in np.arange(0, 256)]).astype("uint8")
-                # apply gamma correction using the lookup table
-            f3_gam= cv2.LUT(f_8, table)
-            
-            # i1: bleu, i2: vert, i3:rouge
-            i1=(f1_gam*0.92).astype('uint8')     # was 0.5 
-            i2=(f2_gam*0.98).astype('uint8')       # was 0.9
-            i3=(f3_gam*1).astype('uint8')       # is 1
-            
-            gamma=0.5 # gam total image 1 trop fade, 0.7 pas mal
-            invGamma = 1.0 / gamma
-            table = np.array([((i / 255.0) ** invGamma) * 255
-            for i in np.arange(0, 256)]).astype("uint8")
-                # apply gamma correction using the lookup table
-            i1= cv2.LUT(i1, table)
-            i2= cv2.LUT(i2, table)
-            i3= cv2.LUT(i3, table)
-            
-                
-            img_color=np.zeros([frame_contrasted.shape[0], frame_contrasted.shape[1], 3],dtype='uint8')
-            img_color[:,:,0] = np.array(i1, dtype='uint8') # blue
-            img_color[:,:,1] = np.array(i2, dtype='uint8') # green
-            img_color[:,:,2] = np.array(i3, dtype='uint8') # red
-            
 
         cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.png'),img_color)
         cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),img_color)
