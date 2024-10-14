@@ -40,7 +40,7 @@ def get_data(path='storage/scans/'):
     Returns:
         str: HTML content displaying scan information and thumbnails.
     """
-    scans = get_scans(path)
+    scans = get_scans(path, True)
     html = '<h1>SUNSCAN</h1>'
     for s in scans:
         html += '<h2>'+os.path.basename(s['path'])+'</h2><a href="/'+os.path.join(s['path'],'scan.ser')+'" target="_blank">Download SER file</a><br><a href="/'+os.path.join(s['path'],'Complements/_scan_raw.fits')+'" target="_blank">Download RAW fits file</a><p>'
