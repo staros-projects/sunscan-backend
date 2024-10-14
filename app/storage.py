@@ -91,8 +91,7 @@ def get_scans(path='storage/scans/', withDetails=False):
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
                     'cont':'Continuum : Clahe + Unsharp mask',
                     'doppler':'Doppler',
-                    'clahe_colour':'Clahe + Unsharp mask + Halpha colorization',
-                    'clahe_colour_caII':'Clahe + Unsharp mask + Ca II colorization',
+                    'clahe_colour':'Clahe + Unsharp mask + colorization',
                     'raw':  'Raw'}
 
     for root, dirs, files in os.walk(path, topdown=False):
