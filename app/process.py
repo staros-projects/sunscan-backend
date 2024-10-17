@@ -169,7 +169,6 @@ def create_surface_image(wd, frames):
     cc = sharpenImage(cc)
    
     # Save CLAHE image as PNG and JPG
-    cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'),cc/256)
     # Create and save a smaller preview image
     ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
@@ -210,7 +209,6 @@ def create_continuum_image(wd, frames):
         cc = sharpenImage(cc)
 
         # save as png
-        cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
         cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),cc/256)
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
@@ -283,7 +281,6 @@ def create_protus_image(wd, frames, cercle):
     cc = sharpenImage(cc)  # Sharpen the image
 
     # Save as PNG and JPG
-    cv2.imwrite(os.path.join(wd, 'sunscan_protus.png'), cc)
     cv2.imwrite(os.path.join(wd, 'sunscan_protus.jpg'), cc / 256)
 
 def create_doppler_image(wd, frames):
@@ -315,7 +312,6 @@ def create_doppler_image(wd, frames):
             img_doppler=cv2.flip(img_doppler,0)
 
             # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),img_doppler/256)
                 
         except:
@@ -459,7 +455,6 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             cc[cc<0]=0
             img_color=cc
 
-        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.png'),img_color)
         cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),img_color)
         return img_color
     
