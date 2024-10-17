@@ -53,6 +53,8 @@ from process import process_scan
 
 from pydantic import BaseModel
 
+BACKEND_API_VERSION = '1.1.5'
+
 class SetTimeProp(BaseModel):
     unixtime: str
 
@@ -246,7 +248,7 @@ async def connect(request: Request):
     """
     du = get_available_size()
     
-    version = {'camera':current_camera, 'backend_api_version':'1.1.5', 'battery':power.get_battery(), 'battery_power_plugged':power.battery_power_plugged()}
+    version = {'camera':current_camera, 'backend_api_version':BACKEND_API_VERSION, 'battery':power.get_battery(), 'battery_power_plugged':power.battery_power_plugged()}
     return JSONResponse(content=jsonable_encoder(du | version))
 
 @app.get("/sunscan/scans", response_class=JSONResponse)

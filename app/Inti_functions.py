@@ -838,45 +838,45 @@ def auto_crop_img (cam_height, h,w, frame, cercle0, debug_crop, param):
     # il faut changer les coordonnées du centre de cercle0
     centre_hor=cercle0[0]
     centre_vert=cercle0[1]
-    
-    if asym_h <0  or asym_h <= cercle0[2]+20:
-        #print("on ne centre pas en hauteur")
-        if crop_force_largeur != 0 :
-            crop_wi = crop_force_largeur
-            print("autocrop forced")
-        else :
-            # largeur image multiple de ih
-            # version 5.0 etait à 50
-            if diam_sol+100 >= 2*ih :
-                print("on prend largeur image a 3*ih", 3*ih)
-                crop_wi = ih*3
-            else  :
-                if diam_sol +100 >=ih :
-                    print("on prend largeur image a 2*ih",2*ih)
-                    crop_wi = ih*2
-                else :
-                    #print("on garde image carrée")
-                    crop_wi = crop_he
+ 
+    #if asym_h <0  or asym_h <= cercle0[2]+20:
+    #     #print("on ne centre pas en hauteur")
+    #     if crop_force_largeur != 0 :
+    #         crop_wi = crop_force_largeur
+    #         print("autocrop forced")
+    #     else :
+    #         # largeur image multiple de ih
+    #         # version 5.0 etait à 50
+    #         if diam_sol+100 >= 2*ih :
+    #             print("on prend largeur image a 3*ih", 3*ih)
+    #             crop_wi = ih*3
+    #         else  :
+    #             if diam_sol +100 >=ih :
+    #                 print("on prend largeur image a 2*ih",2*ih)
+    #                 crop_wi = ih*2
+    #             else :
+    #                 #print("on garde image carrée")
+    #                 crop_wi = crop_he
 
-        # translation
-        d_hor = cercle0[0]-crop_wi//2
-        d_vert = 0
-        centre_hor = crop_wi//2
+    #     # translation
+    #     d_hor = cercle0[0]-crop_wi//2
+    #     d_vert = 0
+    #     centre_hor = crop_wi//2
         
-    else :
-        crop_wi = crop_he
-        if crop_force_hauteur != 0 :
-            crop_he = crop_force_hauteur
-        if crop_force_largeur != 0 :
-            crop_wi= crop_force_largeur
-            
-        #print('on centre et on crop')
+    # else :
+    crop_wi = crop_he
+    if crop_force_hauteur != 0 :
+        crop_he = crop_force_hauteur
+    if crop_force_largeur != 0 :
+        crop_wi= crop_force_largeur
         
-        # translation
-        d_hor = cercle0[0]-crop_wi//2
-        d_vert = cercle0[1]-crop_he//2
-        centre_hor = crop_wi//2
-        centre_vert = crop_he//2
+    #print('on centre et on crop')
+    
+    # translation
+    d_hor = cercle0[0]-crop_wi//2
+    d_vert = cercle0[1]-crop_he//2
+    centre_hor = crop_wi//2
+    centre_vert = crop_he//2
 
 
     if d_hor < 0: # doit decaler crop_img 
