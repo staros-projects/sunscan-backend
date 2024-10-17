@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8000'; //todo : set config avec api en dev/prod
+const API_URL = 'http://sunscan.local:8000'; //todo : set config avec api en dev/prod
 
 export async function getDateFolders() {
   const response = await fetch(`${API_URL}/dates`);

@@ -7,7 +7,7 @@ import Layout from './Layout';
 
 const ImageView = () => {
   const { dateFolder, scanFolder, imageName } = useParams();
-  const imageUrl = `http://localhost:8000/images/${dateFolder}/${scanFolder}/${imageName}`;
+  const imageUrl = `http://sunscan.local:8000/images/${dateFolder}/${scanFolder}/${imageName}`;
 
   return (
     <Layout title={`Image: ${imageName}`} backLink={`/date/${dateFolder}/scan/${scanFolder}`}>

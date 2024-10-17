@@ -70,7 +70,7 @@ const ScanView = () => {
           <Link to={`/date/${dateFolder}/scan/${scanFolder}/image/${file.name}`} key={file.name} className="file-item">
             <div className="file-thumbnail">
               {isImage(file.name) ? (
-                <img src={`http://localhost:8000/images/${dateFolder}/${scanFolder}/${file.name}`} alt={file.name} />
+                <img src={`http://sunscan.local:8000/images/${dateFolder}/${scanFolder}/${file.name}`} alt={file.name} />
               ) : (
                 getFileIcon(file.name)
               )}
