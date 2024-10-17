@@ -140,62 +140,6 @@ def getCameraControls():
         content = jsonable_encoder(app.cameraController.getCameraControls())
         return JSONResponse(content=content) 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    """
-    Render the home page with comprehensive system information.
-    
-    This route generates an HTML response containing detailed system
-    information, useful for diagnostics and user information. It includes
-    OS details, platform information, and Python version.
-    
-    Args:
-        request (Request): The incoming request object.
-    
-    Returns:
-        TemplateResponse: Rendered HTML template with system information.
-    """
-    return templates.TemplateResponse("index.html", {"request": request,
-                                                     "os" : os.name,
-                                                     "platform" : platform.system(),
-                                                     "architecture" : platform.architecture(),
-                                                     "platform_release" : platform.release(),
-                                                     "python_version" : sys.version})
-
-@app.get("/data/scans", response_class=HTMLResponse)
-async def home(request: Request):
-    """
-    Retrieve and return data about all scans.
-    
-    This endpoint fetches information about all scans stored in the system.
-    It's useful for displaying a list of available scans to the user.
-    
-    Args:
-        request (Request): The incoming request object.
-    
-    Returns:
-        HTMLResponse: HTML content containing scan data.
-    """
-    return get_data()
-
-@app.get("/data/snapshots", response_class=HTMLResponse)
-async def home(request: Request):
-    """
-    Retrieve and return data about all snapshots.
-    
-    Similar to the scans endpoint, this fetches information about
-    all snapshots taken by the device. It's used to display a list
-    of available snapshots to the user.
-    
-    Args:
-        request (Request): The incoming request object.
-    
-    Returns:
-        HTMLResponse: HTML content containing snapshot data.
-    """
-    return get_data2()
-
-
 @app.post("/update")
 async def update(file: UploadFile = File(...)):
     """
