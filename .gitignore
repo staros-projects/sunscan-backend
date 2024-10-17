@@ -124,3 +124,6 @@ dmypy.json
 /app/storage/snapshots/*
 /app/storage/tmp/*
 /app/storage/tmp/test/*
+app/main_dev.py
+
+app/requirements_dev.txt

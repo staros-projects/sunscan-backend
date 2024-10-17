@@ -42,6 +42,7 @@ import queue
 from locate_lines import locateLines
 
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import FileResponse
 
 from storage import *
 from camera import *
@@ -192,6 +193,7 @@ async def home(request: Request):
     """
     return get_data2()
 
+
 @app.post("/update")
 async def update(file: UploadFile = File(...)):
     """
@@ -283,7 +285,7 @@ async def connect(request: Request):
     if app.cameraController.getStatus() != "connected":
         app.cameraController.start()
     return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
-    
+
 @app.get("/camera/disconnect", response_class=JSONResponse)
 async def disconnect(request: Request):
     """
@@ -732,3 +734,68 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print('Socket close.')
+
+
+## ------------ Webapp Routes here-------- #
+# Todo : draft for now - clear and clean stuff
+# Chemin vers le dossier contenant les scans
+# Se base sur la structure des dossiers de stockage
+SCANS_DIR = "storage/scans"
+
+@app.get("/dates")
+async def get_date_folders():
+    dates = [f for f in os.listdir(SCANS_DIR) if os.path.isdir(os.path.join(SCANS_DIR, f))]
+    return [{"name": date, "thumbnail": get_first_image_thumbnail(date)} for date in dates]
+
+@app.get("/dates/{date_folder}")
+async def get_scan_folders(date_folder: str):
+    date_path = os.path.join(SCANS_DIR, date_folder)
+    if not os.path.exists(date_path):
+        raise HTTPException(status_code=404, detail="Date folder not found")
+    scans = [f for f in os.listdir(date_path) if os.path.isdir(os.path.join(date_path, f))]
+    return [{"name": scan, "thumbnail": get_first_image_thumbnail(date_folder, scan)} for scan in scans]
+
+@app.get("/dates/{date_folder}/scans/{scan_folder}")
+async def get_images_in_scan(date_folder: str, scan_folder: str):
+    scan_path = os.path.join(SCANS_DIR, date_folder, scan_folder)
+    if not os.path.exists(scan_path):
+        raise HTTPException(status_code=404, detail="Scan folder not found")
+    images = [f for f in os.listdir(scan_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.fits', '.ser', '.txt'))] #todo : extract to a main list?
+    return [{"name": image, "thumbnail": f"/images/{date_folder}/{scan_folder}/{image}"} for image in images]
+
+@app.get("/images/{date_folder}/{scan_folder}/{image_name}")
+async def get_image(date_folder: str, scan_folder: str, image_name: str):
+    image_path = os.path.join(SCANS_DIR, date_folder, scan_folder, image_name)
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(image_path)
+
+@app.get("/download/scan/{date_folder}/{scan_folder}")
+async def download_scan(date_folder: str, scan_folder: str):
+    scan_path = os.path.join(SCANS_DIR, date_folder, scan_folder)
+    if not os.path.exists(scan_path):
+        raise HTTPException(status_code=404, detail="Scan folder not found")
+    #  create zip of scan_path
+    shutil.make_archive(scan_path, 'zip', scan_path)
+    scan_path += ".zip"
+    # return FileResponse
+    return FileResponse(scan_path, media_type="application/zip")
+
+
+
+@app.get("/download/image/{date_folder}/{scan_folder}/{image_name}")
+async def download_image(date_folder: str, scan_folder: str, image_name: str):
+    image_path = os.path.join(SCANS_DIR, date_folder, scan_folder, image_name)
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(image_path, filename=image_name)
+
+def get_first_image_thumbnail(date_folder, scan_folder=None):
+    path = os.path.join(SCANS_DIR, date_folder)
+    if scan_folder:
+        path = os.path.join(path, scan_folder)
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.ser', '.txt')): # todo : extract to a main list?
+                return f"/images/{os.path.relpath(os.path.join(root, file), SCANS_DIR)}"
+    return None
