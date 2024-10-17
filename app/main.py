@@ -718,14 +718,11 @@ async def get_image(date_folder: str, scan_folder: str, image_name: str):
 
 @app.get("/download/scan/{date_folder}/{scan_folder}")
 async def download_scan(date_folder: str, scan_folder: str):
-    scan_path = os.path.join(SCANS_DIR, date_folder, scan_folder)
+    scan_path = os.path.join(SCANS_DIR, date_folder, scan_folder,'scan.ser')
     if not os.path.exists(scan_path):
         raise HTTPException(status_code=404, detail="Scan folder not found")
-    #  create zip of scan_path
-    shutil.make_archive(scan_path, 'zip', scan_path)
-    scan_path += ".zip"
     # return FileResponse
-    return FileResponse(scan_path, media_type="application/zip")
+    return FileResponse(scan_path, filename=scan_folder+'.ser')
 
 
 
@@ -734,7 +731,7 @@ async def download_image(date_folder: str, scan_folder: str, image_name: str):
     image_path = os.path.join(SCANS_DIR, date_folder, scan_folder, image_name)
     if not os.path.exists(image_path):
         raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path, filename=image_name)
+    return FileResponse(image_path, filename=scan_folder.replace('sunscan_', '')+'-'+image_name)
 
 def get_first_image_thumbnail(date_folder, scan_folder=None):
     path = os.path.join(SCANS_DIR, date_folder)
