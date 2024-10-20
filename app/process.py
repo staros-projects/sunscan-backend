@@ -271,7 +271,7 @@ def create_protus_image(wd, frames, cercle):
     clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
     cl1 = clahe.apply(frame_contrasted3)
     
-    Seuil_bas = np.percentile(cl1, 45)  # Lower threshold
+    Seuil_bas = np.percentile(cl1, 50)  # Lower threshold
     Seuil_haut = np.percentile(cl1, 99.9999) * 1.05  # Upper threshold
 
     cc = (cl1 - Seuil_bas) * (65000 / (Seuil_haut - Seuil_bas))  # Apply contrast
@@ -432,7 +432,7 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             im = (im * 256).astype(np.uint16)
 
             # Apply thresholds to H-alpha image
-            Seuil_bas=np.percentile(im,75)
+            Seuil_bas=np.percentile(im,68)
             Seuil_haut=np.percentile(im,99.9999)*1.05
             cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
             cc[cc<0]=0
@@ -462,4 +462,4 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("C:\\Users\\g-ber\\Downloads\\scan(6).ser", mock_callback, False, True, 1300)
+    process_scan("/var/www/sunscan-backend/app/storage/scans/2024_10_11/sunscan_2024_10_11-13_36_56/scan.ser", mock_callback, False, True, 1100)

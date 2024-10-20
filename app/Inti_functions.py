@@ -977,7 +977,7 @@ def auto_crop_img (cam_height, h,w, frame, cercle0, debug_crop, param):
         print('vert frame', dv_top, dv_bas)
     
     try :
-        crop_img=np.full((crop_he, crop_wi),300, dtype='uint16')
+        crop_img=np.full((crop_he, crop_wi),0, dtype='uint16')
         crop_img[dcv_top:dcv_bas,dch_left:dch_droite]=frame[dv_top:dv_bas,dh_left:dh_droite]
     except:
         cercleC=cercle0
