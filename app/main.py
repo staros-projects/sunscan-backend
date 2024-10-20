@@ -162,7 +162,7 @@ async def update(file: UploadFile = File(...)):
             buffer.write(await file.read())
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-             zip_ref.extractall("/var/www/sunscan-backend/app/")
+             zip_ref.extractall("/var/www/sunscan-backend/")
 
         os.system("sudo systemctl restart uvicorn")
 
