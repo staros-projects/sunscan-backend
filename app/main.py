@@ -26,7 +26,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.responses import StreamingResponse
 
 import base64
@@ -109,9 +108,7 @@ app.add_middleware(
 )
 
 # Mount static file directories
-app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
-templates = Jinja2Templates(directory="templates")
 
 # Initialize camera controller and normalization flag
 app.cameraController = None
