@@ -52,7 +52,7 @@ from process import process_scan
 
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.1.5'
+BACKEND_API_VERSION = '1.1.7'
 
 class SetTimeProp(BaseModel):
     unixtime: str
