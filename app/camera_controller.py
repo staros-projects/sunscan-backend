@@ -47,7 +47,7 @@ class CameraController:
         self._fc = 0
         
         self._serfile_object = None
-        self._normalize = True
+        self._normalize = 1
         self._flat_enabled = False
 
     def _init(self):
@@ -230,14 +230,14 @@ class CameraController:
         self._crop = not self._crop
         self._camera.updateCameraControls(self.getCameraControls())
 
-    def toggleNormalize(self):
+    def toggleNormalize(self, mode):
         """
         Toggle image normalization.
         """
-        self._normalize = not self._normalize
-        self._camera.updateCameraControls(self.getCameraControls())
+        self._normalize = mode
+        #self._camera.updateCameraControls(self.getCameraControls())
 
-    def cameraIsNormalize(self):
+    def normalizeMode(self):
         """
         Check if image normalization is active.
 

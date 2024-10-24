@@ -117,7 +117,7 @@ def get_scans(path='storage/scans/', withDetails=False):
     scans_with_status = []
     for s in scans:
         
-        if os.path.exists(os.path.join(s['path'],'sunscan_clahe.png')):
+        if os.path.exists(os.path.join(s['path'],'sunscan_clahe.jpg')):
             s['status'] = 'completed'
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'

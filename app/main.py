@@ -394,21 +394,18 @@ async def toggleColorMode(request: Request):
     app.cameraController.toggleColorMode()
     return getCameraControls()
 
-@app.get("/camera/toggle-normalize/", response_class=JSONResponse)
-async def toggleNormalize(request: Request):
-    """
-    Toggle image normalization.
-    
-    This endpoint enables or disables image normalization, which can
-    enhance image quality and consistency across different lighting conditions.
-    
-    Args:
-        request (Request): The incoming request object.
-    
-    Returns:
-        JSONResponse: Updated camera settings after toggling normalization.
-    """
-    app.cameraController.toggleNormalize()
+@app.get("/camera/toggle-normalize/0", response_class=JSONResponse)
+async def switchOffNormalize(request: Request):
+    return await toggleNormalize(0)
+@app.get("/camera/toggle-normalize/1", response_class=JSONResponse)
+async def switchOffNormalize(request: Request):
+    return await toggleNormalize(1)
+@app.get("/camera/toggle-normalize/2", response_class=JSONResponse)
+async def switchOffNormalize(request: Request):
+    return await toggleNormalize(2)
+
+async def toggleNormalize(mode):
+    app.cameraController.toggleNormalize(mode)
     return getCameraControls()
 
 @app.get("/camera/toggle-bin/", response_class=JSONResponse)
@@ -656,12 +653,11 @@ async def websocket_endpoint(websocket: WebSocket):
                             await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
                     # Apply normalization if enabled
-                    if app.cameraController.cameraIsNormalize():
+                    if app.cameraController.normalizeMode()==2:
+                        percentile_value = np.percentile(r, 99)
+                        r = np.clip(r / percentile_value * 256, 0, 256)
+                    elif app.cameraController.normalizeMode()==1:    
                         r = cv2.normalize(r, dst=None, alpha=0, beta=256, norm_type=cv2.NORM_MINMAX)
-
-                    #TODO : so false here .. never used ?
-                    if False and not app.cameraController.isRecording():
-                        r = locateLines(r)
 
                     # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()
