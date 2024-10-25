@@ -17,7 +17,9 @@ This command resets the hotspot SSID to its default configuration.
 To remove all files from the Sunscan app's storage, run:
 
 ```bash
-admin@sunscan:/var/www/sunscan-backend $ sudo rm -Rf app/storage/*
+admin@sunscan:/var/www/sunscan-backend $ sudo rm -Rf app/storage/scans/*
+admin@sunscan:/var/www/sunscan-backend $ sudo rm -Rf app/storage/snapshots/*
+admin@sunscan:/var/www/sunscan-backend $ sudo rm -Rf app/storage/tmp/*
 ```
 
 This command ensures that the storage is cleared before creating the OS image.
