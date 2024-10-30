@@ -52,16 +52,25 @@ from process import process_scan
 
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.1.7'
+BACKEND_API_VERSION = '1.1.8'
 
 class SetTimeProp(BaseModel):
     unixtime: str
 
-class Scan(BaseModel):
+
+class ScanBase(BaseModel):
     filename: str
+
+class Scan(ScanBase):
     autocrop: bool
-    dopcont: bool
     autocrop_size: int
+    dopcont: bool
+    noisereduction: bool
+    doppler_shift: int
+    continuum_shift: int
+    surface_sharpen_level: int
+    pro_sharpen_level: int
+    cont_sharpen_level: int
 
 class CameraControls(BaseModel):
     exp: float
@@ -553,7 +562,7 @@ def notifyScanProcessCompleted(filename, status):
     app.q.put('scan_process_'+md5(filename.encode()).hexdigest()+';#;'+status) 
 
 @app.post("/sunscan/scan/delete/", response_class=JSONResponse)
-async def deleteScan(scan:Scan, background_tasks: BackgroundTasks):
+async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     """
     Delete a scan directory.
     
@@ -574,7 +583,7 @@ async def deleteScan(scan:Scan, background_tasks: BackgroundTasks):
         print(f"The directory {scan.filename} does not exist.")
 
 @app.post("/sunscan/scan", response_class=JSONResponse)
-async def getScanDetails(scan:Scan, request: Request):
+async def getScanDetails(scan:ScanBase, request: Request):
     scans = get_single_scan(scan.filename)
     return JSONResponse(content=jsonable_encoder(scans))
 
@@ -595,7 +604,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
         None: The processing is done in the background, so no immediate return.
     """
     if (os.path.exists(scan.filename)):
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size)
+        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -649,6 +658,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         # Send intensity and spectrum data for cropped images
                         if app.cameraController.cameraIsCropped() and not app.cameraController.isInColorMode():
+                            print(frame)
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
@@ -673,6 +683,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print('Socket close.')
+
 
 
 ## ------------ Webapp Routes here-------- #

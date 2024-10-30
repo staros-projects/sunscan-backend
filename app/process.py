@@ -9,7 +9,7 @@ try :
 except: 
     from serfilesreader.serfilesreader import Serfile # ToDo : delete?
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1300):
+def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -41,7 +41,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     if not os.path.isdir(subrep):
         os.makedirs(subrep)
 
-    Shift = [0, 5, 16, 0.0, 0.0, 0.0]
+    Shift = [0, dopplerShift, contShift, 0.0, 0.0, 0.0]
     Flags =  {'DOPFLIP': False, 
             'SAVEPOLY': False, 
             'FLIPRA': True, 
@@ -50,7 +50,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             'Autocrop': autocrop, 
             'FREE_AUTOPOLY': False, 
             'ZEE_AUTOPOLY': False, 
-            'NOISEREDUC': False, 
+            'NOISEREDUC': noisereduction, 
             'DOPCONT': dopcont, 
             'VOL': False, 
             'POL': False, 
@@ -73,11 +73,11 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
         # Create and save surface image
-        create_surface_image(WorkDir, frames)
+        create_surface_image(WorkDir, frames, surfaceSharpLevel)
         # Create and save continuum image
-        create_continuum_image(WorkDir, frames)
+        create_continuum_image(WorkDir, frames, contSharpLevel)
         # Create and save prominence (protus) image
-        create_protus_image(WorkDir, frames, cercle)
+        create_protus_image(WorkDir, frames, cercle, proSharpLevel)
         # If doppler contrast is enabled, create and save doppler image
         if dopcont:
             create_doppler_image(WorkDir, frames)
@@ -90,7 +90,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         callback(serfile, 'failed')
 
 
-def sharpenImage(image):
+def sharpenImage(image, level):
     """
     Apply multiple sharpening operations to an image.
 
@@ -100,23 +100,20 @@ def sharpenImage(image):
     Returns:
         numpy.ndarray: Sharpened image.
     """
-    # Apply Gaussian blur with a 9x9 kernel and sigma of 10.0
-    gaussian_3 = cv2.GaussianBlur(image, (9,9), 10.0)
-    # Sharpen the image by subtracting the blurred image
-    image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
+    for i in range(0,level):
+        # Apply Gaussian blur with a 9x9 kernel and sigma of 10.0
+        gaussian_3 = cv2.GaussianBlur(image, (9,9), 10.0)
+        # Sharpen the image by subtracting the blurred image
+        image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
 
-    # Apply Gaussian blur with a 9x9 kernel and sigma of 8.0
-    gaussian_3 = cv2.GaussianBlur(image, (9,9), 8.0)
-    # Sharpen the image again
-    image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
-
-    # Apply Gaussian blur with a 3x3 kernel and sigma of 8.0
-    gaussian_3 = cv2.GaussianBlur(image, (3,3), 8.0)
-    # Sharpen the image one more time
-    image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
+        if (i <2):
+            # Apply Gaussian blur with a 3x3 kernel and sigma of 8.0
+            gaussian_3 = cv2.GaussianBlur(image, (3,3), 8.0)
+            # Sharpen the image one more time
+            image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames):
+def create_surface_image(wd, frames, level):
     """
     Create and save various surface images of the sun.
 
@@ -166,7 +163,7 @@ def create_surface_image(wd, frames):
     cc=cv2.flip(cc,0)
 
     # Apply sharpening to the image
-    cc = sharpenImage(cc)
+    cc = sharpenImage(cc, level)
    
     # Save CLAHE image as PNG and JPG
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'),cc/256)
@@ -178,7 +175,7 @@ def create_surface_image(wd, frames):
     Colorise_Image('auto', cc, wd)
 
 
-def create_continuum_image(wd, frames):
+def create_continuum_image(wd, frames, level):
     """
     Create and save a continuum image of the sun.
 
@@ -206,14 +203,14 @@ def create_continuum_image(wd, frames):
         clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
         cl1 = clahe.apply(cc)
 
-        cc = sharpenImage(cc)
+        cc = sharpenImage(cc, level)
 
         # save as png
         cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),cc/256)
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, frames, cercle):
+def create_protus_image(wd, frames, cercle, level):
     """
     Create and save a prominence (protus) image of the sun.
 
@@ -278,7 +275,7 @@ def create_protus_image(wd, frames, cercle):
     cc[cc < 0] = 0  # Remove negative values
     cc = np.array(cc, dtype='uint16')
 
-    cc = sharpenImage(cc)  # Sharpen the image
+    cc = sharpenImage(cc, level)  # Sharpen the image
 
     # Save as PNG and JPG
     cv2.imwrite(os.path.join(wd, 'sunscan_protus.jpg'), cc / 256)

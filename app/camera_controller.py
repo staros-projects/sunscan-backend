@@ -251,7 +251,7 @@ class CameraController:
 
         :return: Boolean indicating cropping status
         """
-        return self.cameraIsCropped
+        return self._crop
 
     def setCropVerticalPosition(self, direction):
         """

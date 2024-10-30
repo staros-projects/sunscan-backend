@@ -632,6 +632,7 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
     # 11 aout 22 ajout du retour en param des coef du polynome pour logger dans ini.yaml
     # 22 aout on ne veut plus sauver le polynome
     # polynome=[a,b,c]
+
     
     np_fit=np.asarray(fit)
     xi, xdec,y = np_fit.T
@@ -716,6 +717,8 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
     FrameMax=FrameCount
     
     Disk=[]
+
+
     
     # reduction de bruit - moyenne de 3 colonnes
     if len(range_dec)==1 and Flags["NOISEREDUC"] == 1 :

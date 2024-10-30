@@ -164,12 +164,11 @@ class IMX477Camera_CSI():
             restart = True
         
         self._cameraControls = Controls(self._picam2)
-        self._cameraControls.AeEnable = 0 if options['monobin'] else 1
-        #self._cameraControls.AeConstraintMode = controls.AeConstraintModeEnum.Highlight 
+        self._cameraControls.AeEnable = 0 
         self._cameraControls.AwbEnable = False
         self._cameraControls.FrameDurationLimits = (int(150*1e3),60000000)
         self._cameraControls.ExposureTime = int(options['exposure_time'])
-        self._cameraControls.AnalogueGain = 1.0 if not options['monobin'] else options['gain']
+        self._cameraControls.AnalogueGain = options['gain']
         self._cameraControls.Contrast = 0.0
         self._cameraControls.Brightness = 0.0
         self._cameraControls.NoiseReductionMode = controls.draft.NoiseReductionModeEnum.Off
