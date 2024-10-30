@@ -10,7 +10,10 @@ const DateView = () => {
   const [scanFolders, setScanFolders] = useState([]);
 
   useEffect(() => {
-    getScanFolders(dateFolder).then(setScanFolders);
+    getScanFolders(dateFolder).then((items)=>{
+        // Sort by the name field
+        const sortedItems = items.sort((a, b) => a.name.localeCompare(b.name));
+        setScanFolders(sortedItems)});
   }, [dateFolder]);
 
   return (

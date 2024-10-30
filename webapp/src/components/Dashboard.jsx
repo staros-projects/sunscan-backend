@@ -9,7 +9,11 @@ const Dashboard = () => {
   const [dateFolders, setDateFolders] = useState([]);
 
   useEffect(() => {
-    getDateFolders().then(setDateFolders);
+    getDateFolders().then((items)=>{
+      // Sort by the name field
+      const sortedItems = items.sort((a, b) => a.name.localeCompare(b.name));
+      setDateFolders(sortedItems);
+    });
   }, []);
 
   return (

@@ -10,7 +10,10 @@ function FolderView() {
   const [images, setImages] = useState([]);
 
   useEffect(() => {
-    getImagesInFolder(folderName).then(setImages);
+    getImagesInFolder(folderName).then((items)=>{
+      // Sort by the name field
+      const sortedItems = items.sort((a, b) => a.name.localeCompare(b.name));
+      setImages(sortedItems)});
   }, [folderName]);
 
   return (
