@@ -658,7 +658,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
                         # Send intensity and spectrum data for cropped images
                         if app.cameraController.cameraIsCropped() and not app.cameraController.isInColorMode():
-                            print(frame)
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
