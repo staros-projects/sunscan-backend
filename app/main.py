@@ -52,7 +52,7 @@ from process import process_scan
 
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.1.8'
+BACKEND_API_VERSION = '1.1.9'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -173,7 +173,7 @@ async def update(file: UploadFile = File(...)):
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
              zip_ref.extractall("/var/www/sunscan-backend/")
 
-        os.system("sudo systemctl restart uvicorn")
+        os.system("sudo shutdown -h now")
 
         return JSONResponse(content={"message": "Update successful"}, status_code=200)
     
