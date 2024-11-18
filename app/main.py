@@ -529,6 +529,8 @@ async def resetControls(request: Request):
 app.snapShotCount = 1
 app.takeSnapShot = False
 app.snapshot_filename = ''
+app.snapshot_header = None
+
 @app.get("/camera/take-snapshot/", response_class=JSONResponse)
 async def takeSnapShot(request: Request):
     """
@@ -561,13 +563,15 @@ async def takeSnapShot(request: Request):
         hdr['BIN2']=1
         hdr['EXPTIME']=int(cc['exposure_time']/1000)
         hdr['GAIN']=cc['gain']
-        hdr['DATE-OBS']=datetime.datetime.strftime('"%Y-%m-%dT%H:%M:%S.%f7%z"')
+        hdr['DATE-OBS']=datetime.datetime.now().strftime('"%Y-%m-%dT%H:%M:%S.%f7%z"')
         hdr['OBSERVER']='SUNSCAN'
         hdr['INSTRUME']='SUNSCAN'
         hdr['TELESCOP']='SUNSCAN'
         hdr['OBJNAME']='Sun'
         hdr['PHYSPARA']= 'Intensity'
         hdr['WAVEUNIT']= -10
+
+        app.snapshot_header = hdr
 
         return JSONResponse(content=jsonable_encoder({"filename":app.snapshot_filename}))
 
@@ -670,18 +674,19 @@ async def websocket_endpoint(websocket: WebSocket):
                         height = int(frame.shape[0] * scale_percent / 100)
      
                         # Handle snapshot capture if requested
-                        if app.takeSnapShot and app.snapshot_filename:
+                        if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
                             d = time.strftime("%Y_%m_%d")
                             cv2.imwrite(app.snapshot_filename+'.png',frame) 
 
-                            app.header['WIDTH']=frame.shape[1]
-                            app.header['HEIGHT']=frame.shape[0]
+                            app.snapshot_header['WIDTH']=frame.shape[1]
+                            app.snapshot_header['HEIGHT']=frame.shape[0]
 
-                            DiskHDU=fits.PrimaryHDU(frame,app.header)
+                            DiskHDU=fits.PrimaryHDU(frame,app.snapshot_header)
                             DiskHDU.writeto(app.snapshot_filename+'.fits', overwrite='True')
 
                             app.snapShotCount += 1
                             app.takeSnapShot = False
+                            app.snapshot_header = None
                     
                         # Get and send ADU values
                         max_adu = app.cameraController.getMaxADU()
