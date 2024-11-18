@@ -9,7 +9,7 @@ try :
 except: 
     from serfilesreader.serfilesreader import Serfile # ToDo : delete?
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1):
+def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -41,20 +41,20 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     if not os.path.isdir(subrep):
         os.makedirs(subrep)
 
-    Shift = [0, dopplerShift, contShift, 0.0, 0.0, 0.0]
+    Shift = [0, dopplerShift, contShift, offset, 0.0, 0.0]
     Flags =  {'DOPFLIP': False, 
             'SAVEPOLY': False, 
             'FLIPRA': True, 
             'FLIPNS': True, 
             'FORCE_FREE_MAGN': False, 
             'Autocrop': autocrop, 
-            'FREE_AUTOPOLY': False, 
+            'FREE_AUTOPOLY': offset != 0, 
             'ZEE_AUTOPOLY': False, 
             'NOISEREDUC': noisereduction, 
             'DOPCONT': dopcont, 
             'VOL': False, 
             'POL': False, 
-            'WEAK': False, 
+            'WEAK': offset != 0, 
             'RTDISP': False, 
             'ALLFITS': False, 
             'sortie': False,

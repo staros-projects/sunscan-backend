@@ -49,10 +49,10 @@ from power import PowerHelper
 from camera_controller import CameraController
 
 from process import process_scan
-
+ 
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.1.9'
+BACKEND_API_VERSION = '1.2.0'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -71,10 +71,12 @@ class Scan(ScanBase):
     surface_sharpen_level: int
     pro_sharpen_level: int
     cont_sharpen_level: int
+    offset: int
 
 class CameraControls(BaseModel):
     exp: float
     gain: float
+    max_visu_threshold: int
 
 # Logging configuration (currently commented out)
 # now = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -604,7 +606,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
         None: The processing is done in the background, so no immediate return.
     """
     if (os.path.exists(scan.filename)):
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level)
+        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -662,12 +664,14 @@ async def websocket_endpoint(websocket: WebSocket):
                             await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
                     # Apply normalization if enabled
-                    if app.cameraController.normalizeMode()==2:
-                        percentile_value = np.percentile(r, 99)
-                        r = np.clip(r / percentile_value * 256, 0, 256)
-                    elif app.cameraController.normalizeMode()==1:    
+                    if app.cameraController.normalizeMode()==1:    
                         r = cv2.normalize(r, dst=None, alpha=0, beta=256, norm_type=cv2.NORM_MINMAX)
+                    else:
+                        max_threshold = app.cameraController.getMaxVisuThreshold()
+                        r = (r * 256) / max_threshold
+        
 
+                    
                     # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()
                     file_64encoded = str(base64.b64encode(byte_im)  ).split('b\'')

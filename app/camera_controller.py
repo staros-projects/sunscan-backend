@@ -49,6 +49,7 @@ class CameraController:
         self._serfile_object = None
         self._normalize = 1
         self._flat_enabled = False
+        self._max_visu_threshold = 256
 
     def _init(self):
         """
@@ -195,6 +196,7 @@ class CameraController:
                 'crop': self._crop, 
                 'record': self._record,
                 'crop_y': self._crop_y,
+                'max_visu_threshold': self._max_visu_threshold,
                 'crop_height': self._crop_height,
                 'preview_crop_y': self._preview_crop_y,
                 'preview_crop_height': self._preview_crop_height,
@@ -213,6 +215,7 @@ class CameraController:
         """
         self._exposure_time = controls.exp * 1e3
         self._gain = controls.gain
+        self._max_visu_threshold = controls.max_visu_threshold
         self._camera.updateCameraControls(self.getCameraControls())
 
     def resetControls(self):
@@ -252,6 +255,9 @@ class CameraController:
         :return: Boolean indicating cropping status
         """
         return self._crop
+
+    def getMaxVisuThreshold(self):
+        return self._max_visu_threshold
 
     def setCropVerticalPosition(self, direction):
         """
