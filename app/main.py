@@ -21,12 +21,14 @@ import sys
 import time
 import shutil
 import zipfile
+import datetime
 from hashlib import md5
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
+from astropy.io import fits
 
 import base64
 from fastapi import FastAPI, WebSocket, Request, File, UploadFile, HTTPException, WebSocketDisconnect, Header, Response, Body, BackgroundTasks
@@ -545,7 +547,28 @@ async def takeSnapShot(request: Request):
         app.takeSnapShot = True
         d = time.strftime("%Y_%m_%d-%H_%M_%S")
         cc = app.cameraController.getCameraControls()
-        app.snapshot_filename= f"storage/snapshots/frame_{d}_{app.snapShotCount}_{int(cc['exposure_time']/1000)}ms_{cc['gain']}db.png"
+        app.snapshot_filename= f"storage/snapshots/frame_{d}_{app.snapShotCount}"
+
+        hdr= fits.Header()
+        hdr['SIMPLE']='T'
+        hdr['BITPIX']=32
+        hdr['NAXIS']=2
+        hdr['NAXIS1']=0
+        hdr['NAXIS2']=0
+        hdr['BZERO']=0
+        hdr['BSCALE']=1
+        hdr['BIN1']=1
+        hdr['BIN2']=1
+        hdr['EXPTIME']=int(cc['exposure_time']/1000)
+        hdr['GAIN']=cc['gain']
+        hdr['DATE-OBS']=datetime.datetime.strftime('"%Y-%m-%dT%H:%M:%S.%f7%z"')
+        hdr['OBSERVER']='SUNSCAN'
+        hdr['INSTRUME']='SUNSCAN'
+        hdr['TELESCOP']='SUNSCAN'
+        hdr['OBJNAME']='Sun'
+        hdr['PHYSPARA']= 'Intensity'
+        hdr['WAVEUNIT']= -10
+
         return JSONResponse(content=jsonable_encoder({"filename":app.snapshot_filename}))
 
 def notifyScanProcessCompleted(filename, status):
@@ -649,7 +672,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename:
                             d = time.strftime("%Y_%m_%d")
-                            cv2.imwrite(app.snapshot_filename,frame) 
+                            cv2.imwrite(app.snapshot_filename+'.png',frame) 
+
+                            app.header['WIDTH']=frame.shape[1]
+                            app.header['HEIGHT']=frame.shape[0]
+
+                            DiskHDU=fits.PrimaryHDU(frame,app.header)
+                            DiskHDU.writeto(app.snapshot_filename+'.fits', overwrite='True')
+
                             app.snapShotCount += 1
                             app.takeSnapShot = False
                     
