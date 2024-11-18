@@ -5,6 +5,15 @@ export async function getDateFolders() {
   return response.json();
 }
 
+export async function getSnapshots() {
+  const response = await fetch(`${API_URL}/snapshots`);
+  return response.json();
+}
+
+export function downloadSnapshot(imageName) {
+  window.location.href = `${API_URL}/download/snapshot/${imageName}`;
+}
+
 export async function getScanFolders(dateFolder) {
   const response = await fetch(`${API_URL}/dates/${dateFolder}`);
   return response.json();

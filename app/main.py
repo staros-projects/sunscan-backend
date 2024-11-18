@@ -694,6 +694,21 @@ async def websocket_endpoint(websocket: WebSocket):
 # Chemin vers le dossier contenant les scans
 # Se base sur la structure des dossiers de stockage
 SCANS_DIR = "storage/scans"
+SNAPSHOTS_DIR = "storage/snapshots"
+
+@app.get("/snapshots")
+async def get_snapshots():
+    if not os.path.exists(SNAPSHOTS_DIR):
+        raise HTTPException(status_code=404, detail="Scan folder not found")
+    images = [f for f in os.listdir(SNAPSHOTS_DIR) if f.lower().endswith(('.fits', '.png'))] #todo : extract to a main list?
+    return [{"name": image, "thumbnail": f"/snapshots/{image}"} for image in images]
+
+@app.get("/download/snapshot/{image_name}")
+async def download_image(image_name: str):
+    image_path = os.path.join(SNAPSHOTS_DIR,image_name)
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(image_path, filename=image_name)
 
 @app.get("/dates")
 async def get_date_folders():
