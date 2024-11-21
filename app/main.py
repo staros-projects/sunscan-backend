@@ -611,6 +611,12 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     else:
         print(f"The directory {scan.filename} does not exist.")
 
+@app.get("/sunscan/shutdown", response_class=JSONResponse)
+async def shutdownSUNSCAN():
+    os.system("sudo shutdown -h now")
+    return JSONResponse(content={"message": "Shutdown ok"}, status_code=200)
+
+
 @app.post("/sunscan/scan", response_class=JSONResponse)
 async def getScanDetails(scan:ScanBase, request: Request):
     scans = get_single_scan(scan.filename)
