@@ -89,7 +89,6 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         # Call the callback function to indicate failure
         callback(serfile, 'failed')
 
-
 def sharpenImage(image, level):
     """
     Apply multiple sharpening operations to an image.

@@ -17,7 +17,7 @@ const DateView = () => {
   }, [dateFolder]);
 
   return (
-    <Layout title={`Date: ${dateFolder}`} backLink="/">
+    <Layout title={`Date: ${dateFolder}`} backLink="/scans">
       <div className="folder-grid">
         {scanFolders.map(scan => (
           <Link to={`/date/${dateFolder}/scan/${scan.name}`} key={scan.name} className="folder-item">

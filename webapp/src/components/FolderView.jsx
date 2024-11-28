@@ -17,7 +17,7 @@ function FolderView() {
   }, [folderName]);
 
   return (
-    <div className="folder-view">
+    <div className="folder-view" >
       <h2>Folder: {folderName}</h2>
       <Link to="/">Back to Dashboard</Link>
       <div className="image-grid">

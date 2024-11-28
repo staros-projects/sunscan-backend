@@ -17,7 +17,7 @@ const ScansDashboard = () => {
   }, []);
 
   return (
-    <Layout title="SUNSCAN Gallery">
+    <Layout title="SUNSCAN Gallery : scans" backLink={`/`}>
       <div className="folder-grid">
         {dateFolders.map(folder => (
           <Link to={`/date/${folder.name}`} key={folder.name} className="folder-item">

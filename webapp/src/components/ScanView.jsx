@@ -3,6 +3,24 @@ import { Link, useParams } from 'react-router-dom';
 import { getImagesInScan, downloadScan } from '../api';
 import Layout from './Layout';
 
+// Fonction pour détecter les types d'images (par extension)
+export const groupFilesByType = (files) => {
+  const groups = {};
+
+  files.forEach(file => {
+    const ext = file.name.split('.').pop().toLowerCase(); 
+    if (!groups[ext]) {
+      groups[ext] = []; 
+    }
+    groups[ext].push(file);
+  });
+
+  Object.keys(groups).forEach(type => {
+    groups[type].sort((a, b) => b.name.localeCompare(a.name)); 
+  });
+
+  return groups; 
+};
 
 // composant pour afficher les images d'un scan
 
@@ -56,7 +74,7 @@ const ScanView = () => {
 };
 
 
-
+const groupedFiles = groupFilesByType(files);
 
 
 
@@ -66,18 +84,30 @@ const ScanView = () => {
         Download Scan
       </button>
       <div className="file-grid">
-        {files.map(file => (
-          <Link to={`/date/${dateFolder}/scan/${scanFolder}/image/${file.name}`} key={file.name} className="file-item">
-            <div className="file-thumbnail">
-              {isImage(file.name) ? (
-                <img src={`http://sunscan.local:8000/images/${dateFolder}/${scanFolder}/${file.name}`} alt={file.name} />
-              ) : (
-                getFileIcon(file.name)
-              )}
-            </div>
-            <p>{file.name}</p>
-          </Link>
-        ))}
+      {Object.entries(groupedFiles).map(([type, groupFiles]) => (
+        <div key={type} className="file-group">
+          <h3>{type.toUpperCase()} Files</h3>
+          {groupFiles.map(file => (
+            <Link
+              to={`/date/${dateFolder}/scan/${scanFolder}/image/${file.name}`}
+              key={file.name}
+              className="file-item"
+            >
+              <div className="file-thumbnail">
+                {isImage(file.name) ? (
+                  <img
+                    src={`http://sunscan.local:8000/images/${dateFolder}/${scanFolder}/${file.name}`}
+                    alt={file.name}
+                  />
+                ) : (
+                  getFileIcon(file.name)
+                )}
+              </div>
+              <p>{file.name}</p>
+            </Link>
+          ))}
+        </div>
+      ))}
       </div>
     </Layout>
   );

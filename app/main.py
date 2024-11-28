@@ -563,7 +563,7 @@ async def takeSnapShot(request: Request):
         hdr['BIN2']=1
         hdr['EXPTIME']=int(cc['exposure_time']/1000)
         hdr['GAIN']=cc['gain']
-        hdr['DATE-OBS']=datetime.datetime.now().strftime('"%Y-%m-%dT%H:%M:%S.%f7%z"')
+        hdr['DATE-OBS']=datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f7%z')
         hdr['OBSERVER']='SUNSCAN'
         hdr['INSTRUME']='SUNSCAN'
         hdr['TELESCOP']='SUNSCAN'

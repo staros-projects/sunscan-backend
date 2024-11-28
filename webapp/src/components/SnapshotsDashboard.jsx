@@ -17,7 +17,7 @@ const SnapshotsDashboard = () => {
   }, []);
 
   return (
-    <Layout title="SUNSCAN Gallery">
+    <Layout title="SUNSCAN Gallery : snapshots" backLink={`/`}>
       <div className="folder-grid">
         {snapshots.map(snapshot => (
           <Link onClick={() => downloadSnapshot(snapshot.name)} key={snapshot.name} className="folder-item">
