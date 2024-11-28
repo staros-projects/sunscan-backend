@@ -183,7 +183,7 @@ def create_surface_image(wd, frames, level, header):
     # Save CLAHE image as PNG and JPG
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'),cc/256)
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
-    save_as_fits(os.path.join(wd,'sunscan_raw.fits'), cc, header)
+    save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
     # Create and save a smaller preview image
     ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
     cv2.imwrite(os.path.join(wd, 'sunscan_preview.jpg'),ccsmall)
