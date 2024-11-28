@@ -95,11 +95,10 @@ def update_header(path, header):
             c = json.load(d)
             header['EXPTIME']=int(c['exposure_time']/1000)
             header['GAIN']=c['gain']
-            header['DATE-OBS']=datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f7%z')
-            hdr['OBSERVER']='SUNSCAN'
-            hdr['INSTRUME']='SUNSCAN'
-            hdr['TELESCOP']='SUNSCAN'
-            hdr['OBJNAME']='Sun'
+            header['OBSERVER']='SUNSCAN'
+            header['INSTRUME']='SUNSCAN'
+            header['TELESCOP']='SUNSCAN'
+            header['OBJNAME']='Sun'
         except Exception as e:
             print("error update header", e)
         return header
