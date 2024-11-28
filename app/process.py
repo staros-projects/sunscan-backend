@@ -1,13 +1,10 @@
 import os
 import cv2
+import json
+import datetime
 import numpy as np
-from scipy.ndimage import median_filter # ToDo : delete?
+from astropy.io import fits
 from Inti_recon import solex_proc 
-import matplotlib.pyplot as plt # ToDo : delete ?
-try : 
-    from serfilesreader import Serfile # Todo : delete ?
-except: 
-    from serfilesreader.serfilesreader import Serfile # ToDo : delete?
 
 def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0):
     """
@@ -72,22 +69,40 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     try:
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
+        
+        header = update_header(WorkDir, header)
         # Create and save surface image
-        create_surface_image(WorkDir, frames, surfaceSharpLevel)
+        create_surface_image(WorkDir, frames, surfaceSharpLevel, header)
         # Create and save continuum image
-        create_continuum_image(WorkDir, frames, contSharpLevel)
+        create_continuum_image(WorkDir, frames, contSharpLevel, header)
         # Create and save prominence (protus) image
-        create_protus_image(WorkDir, frames, cercle, proSharpLevel)
+        create_protus_image(WorkDir, frames, cercle, proSharpLevel, header)
         # If doppler contrast is enabled, create and save doppler image
         if dopcont:
-            create_doppler_image(WorkDir, frames)
+            create_doppler_image(WorkDir, frames, header)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
-    except:
+    except Exception as e:
         # If an error occurs during processing, print an error message
-        print("error solex proc")
+        print("error solex proc", e)
         # Call the callback function to indicate failure
         callback(serfile, 'failed')
+
+def update_header(path, header):
+    if os.path.exists(os.path.join(path, 'sunscan_conf.txt')):
+        d = open(os.path.join(path, 'sunscan_conf.txt'))
+        try:
+            c = json.load(d)
+            header['EXPTIME']=int(c['exposure_time']/1000)
+            header['GAIN']=c['gain']
+            header['OBSERVER']='SUNSCAN'
+            header['INSTRUME']='SUNSCAN'
+            header['TELESCOP']='SUNSCAN'
+            header['OBJNAME']='Sun'
+        except Exception as e:
+            print("error update header", e)
+        return header
+
 
 def sharpenImage(image, level):
     """
@@ -112,7 +127,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, level):
+def create_surface_image(wd, frames, level, header):
     """
     Create and save various surface images of the sun.
 
@@ -125,7 +140,7 @@ def create_surface_image(wd, frames, level):
     """
     # -- RAW --
     # Calculate lower threshold (45th percentile)
-    Seuil_bas=np.percentile(frames[0], 45)
+    Seuil_bas=0
     # Calculate upper threshold (99.9999th percentile * 1.20)
     Seuil_haut=np.percentile(frames[0],99.9999)*1.20
     # Apply thresholds and scale to 16-bit range
@@ -140,6 +155,7 @@ def create_surface_image(wd, frames, level):
     # Save raw image as PNG and JPG
     cv2.imwrite(os.path.join(wd,'sunscan_raw.png'),raw)
     cv2.imwrite(os.path.join(wd,'sunscan_raw.jpg'),raw/256)
+    save_as_fits(os.path.join(wd,'sunscan_raw.fits'), raw, header)
 
 
     # -- CLAHE --
@@ -149,7 +165,7 @@ def create_surface_image(wd, frames, level):
     cl1 = clahe.apply(frames[0])
     
     # Calculate new thresholds for CLAHE image
-    Seuil_bas=np.percentile(cl1, 50)
+    Seuil_bas=0
     Seuil_haut=np.percentile(cl1,99.9999)*1.05
 
     # Apply thresholds and scale to 16-bit range
@@ -166,6 +182,8 @@ def create_surface_image(wd, frames, level):
    
     # Save CLAHE image as PNG and JPG
     cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'),cc/256)
+    cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
+    save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
     # Create and save a smaller preview image
     ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
     cv2.imwrite(os.path.join(wd, 'sunscan_preview.jpg'),ccsmall)
@@ -174,7 +192,7 @@ def create_surface_image(wd, frames, level):
     Colorise_Image('auto', cc, wd)
 
 
-def create_continuum_image(wd, frames, level):
+def create_continuum_image(wd, frames, level, header):
     """
     Create and save a continuum image of the sun.
 
@@ -206,10 +224,11 @@ def create_continuum_image(wd, frames, level):
 
         # save as png
         cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),cc/256)
+        cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, frames, cercle, level):
+def create_protus_image(wd, frames, cercle, level, header):
     """
     Create and save a prominence (protus) image of the sun.
 
@@ -278,8 +297,9 @@ def create_protus_image(wd, frames, cercle, level):
 
     # Save as PNG and JPG
     cv2.imwrite(os.path.join(wd, 'sunscan_protus.jpg'), cc / 256)
+    cv2.imwrite(os.path.join(wd, 'sunscan_protus.png'), cc)
 
-def create_doppler_image(wd, frames):
+def create_doppler_image(wd, frames, header):
     """
     Create and save a Doppler image of the sun.
 
@@ -309,6 +329,7 @@ def create_doppler_image(wd, frames):
 
             # sauvegarde en png 
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),img_doppler/256)
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
                 
         except:
             pass
@@ -453,9 +474,34 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
 
         cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),img_color)
         return img_color
-    
+
+def save_as_fits(path, image, header):
+    DiskHDU=fits.PrimaryHDU(image,header)
+    DiskHDU.writeto(path, overwrite='True')
+
+def get_fits_header(exp, gain):
+    hdr= fits.Header()
+    hdr['SIMPLE']='T'
+    hdr['BITPIX']=32
+    hdr['NAXIS']=2
+    hdr['NAXIS1']=0
+    hdr['NAXIS2']=0
+    hdr['BZERO']=0
+    hdr['BSCALE']=1
+    hdr['BIN1']=1
+    hdr['BIN2']=1
+    hdr['EXPTIME']=int(exp/1000)
+    hdr['GAIN']=gain
+    hdr['DATE-OBS']=datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f7%z')
+    hdr['OBSERVER']='SUNSCAN'
+    hdr['INSTRUME']='SUNSCAN'
+    hdr['TELESCOP']='SUNSCAN'
+    hdr['OBJNAME']='Sun'
+    hdr['PHYSPARA']= 'Intensity'
+    hdr['WAVEUNIT']= -10  
+    return hdr
 
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("/var/www/sunscan-backend/app/storage/scans/2024_10_11/sunscan_2024_10_11-13_36_56/scan.ser", mock_callback, False, True, 1100)
+    process_scan("/var/www/sunscan-backend/app/storage/scans/2024_11_22/sunscan_2024_11_22-12_59_03/scan.ser", mock_callback, False, True, 1100)
