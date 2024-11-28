@@ -1,14 +1,10 @@
 import os
 import cv2
+import json
+import datetime
 import numpy as np
 from astropy.io import fits
-from scipy.ndimage import median_filter # ToDo : delete?
 from Inti_recon import solex_proc 
-import matplotlib.pyplot as plt # ToDo : delete ?
-try : 
-    from serfilesreader import Serfile # Todo : delete ?
-except: 
-    from serfilesreader.serfilesreader import Serfile # ToDo : delete?
 
 def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0):
     """
@@ -73,6 +69,8 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     try:
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
+        
+        header = update_header(WorkDir, header)
         # Create and save surface image
         create_surface_image(WorkDir, frames, surfaceSharpLevel, header)
         # Create and save continuum image
@@ -89,6 +87,22 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         print("error solex proc", e)
         # Call the callback function to indicate failure
         callback(serfile, 'failed')
+
+def update_header(path, header):
+    if os.path.exists(os.path.join(path, 'sunscan_conf.txt')):
+        d = open(os.path.join(path, 'sunscan_conf.txt'))
+        try:
+            c = json.load(d)
+            header['EXPTIME']=int(c['exposure_time']/1000)
+            header['GAIN']=c['gain']
+            header['DATE-OBS']=datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f7%z')
+            hdr['OBSERVER']='SUNSCAN'
+            hdr['INSTRUME']='SUNSCAN'
+            hdr['TELESCOP']='SUNSCAN'
+            hdr['OBJNAME']='Sun'
+        except Exception as e:
+            print("error update header", e)
+        return header
 
 
 def sharpenImage(image, level):

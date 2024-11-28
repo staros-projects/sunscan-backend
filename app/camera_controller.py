@@ -335,10 +335,11 @@ class CameraController:
         serfile_object.setObserver('')
         serfile_object.setInstrument('sunscan')
         serfile_object.setTelescope('sunscan')
+       
         # date et date UTC
-        ts = (datetime.now(timezone.utc).timestamp() * (10000000-0.17) )
-        print('datetime utc ser: '+str(ts))
-        serfile_object.setDateTimeUTC(int(ts))
+        now = get_custom_ts(datetime.now(timezone.utc))
+        serfile_object.setDateTime(now)
+        serfile_object.setDateTimeUTC(now)
         
         # Store the Serfile object
         self._serfile_object = serfile_object
@@ -348,3 +349,14 @@ class CameraController:
             logfile.writelines(json.dumps(self.getCameraControls()))
 
 
+def get_custom_ts(datetime):
+    # Number of 100-nanoseconds between 0001-01-01T00:00:00 and 1970-01-01T00:00:00
+    # This accounts for leap years and the Gregorian calendar reform
+    epoch_offset_100ns = 621355968000000000
+
+    # Convert the current timestamp to 100-nanoseconds since Unix epoch
+    current_time_100ns = int(datetime.timestamp() * 1e7)
+
+    # Adjust to custom epoch by adding the offset
+    custom_epoch_time = epoch_offset_100ns + current_time_100ns 
+    return int(custom_epoch_time  )  

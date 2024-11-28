@@ -15,7 +15,6 @@ backend for the SunScan device.
 
 import logging
 import os
-import io
 import platform
 import sys
 import time
@@ -24,17 +23,14 @@ import zipfile
 import datetime
 from hashlib import md5
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
 from astropy.io import fits
 
 import base64
 from fastapi import FastAPI, WebSocket, Request, File, UploadFile, HTTPException, WebSocketDisconnect, Header, Response, Body, BackgroundTasks
-import datetime as dt
-from threading import Condition, Thread
-from PIL import Image
+
+
 import asyncio
 import cv2
 import numpy as np
