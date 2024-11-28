@@ -1,5 +1,6 @@
 import subprocess
 import logging
+import requests
 
 class PowerHelper:
     """A helper class for managing power-related functions."""
@@ -7,6 +8,16 @@ class PowerHelper:
     def __init__(self):
         """Initialize the PowerHelper class with a logger."""
         self.logger = logging.getLogger('maginkcal')
+
+        try:
+            # Set battery input protection 
+            ps = subprocess.Popen(('echo', 'set_battery_input_protect true'), stdout=subprocess.PIPE)
+            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
+            ps.wait()
+            
+        except Exception as e:
+            self.logger.info('Invalid battery')
+
 
     def get_battery(self):
         """
@@ -25,7 +36,9 @@ class PowerHelper:
             result_str = result.decode('utf-8').rstrip()
             battery_level = result_str.split()[-1]
             battery_float = float(battery_level)
-            #battery_level = "{:.3f}".format(battery_float)
+            
+
+
         except (ValueError, subprocess.CalledProcessError) as e:
             self.logger.info('Invalid battery output')
         return battery_float
