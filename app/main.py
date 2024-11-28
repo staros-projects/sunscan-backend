@@ -50,7 +50,7 @@ from camera import *
 from power import PowerHelper
 from camera_controller import CameraController
 
-from process import process_scan
+from process import process_scan, get_fits_header
  
 from pydantic import BaseModel
 
@@ -551,27 +551,7 @@ async def takeSnapShot(request: Request):
         cc = app.cameraController.getCameraControls()
         app.snapshot_filename= f"storage/snapshots/frame_{d}_{app.snapShotCount}"
 
-        hdr= fits.Header()
-        hdr['SIMPLE']='T'
-        hdr['BITPIX']=32
-        hdr['NAXIS']=2
-        hdr['NAXIS1']=0
-        hdr['NAXIS2']=0
-        hdr['BZERO']=0
-        hdr['BSCALE']=1
-        hdr['BIN1']=1
-        hdr['BIN2']=1
-        hdr['EXPTIME']=int(cc['exposure_time']/1000)
-        hdr['GAIN']=cc['gain']
-        hdr['DATE-OBS']=datetime.datetime.now().strftime('"%Y-%m-%dT%H:%M:%S.%f7%z"')
-        hdr['OBSERVER']='SUNSCAN'
-        hdr['INSTRUME']='SUNSCAN'
-        hdr['TELESCOP']='SUNSCAN'
-        hdr['OBJNAME']='Sun'
-        hdr['PHYSPARA']= 'Intensity'
-        hdr['WAVEUNIT']= -10
-
-        app.snapshot_header = hdr
+        app.snapshot_header = get_fits_header(cc['exposure_time'], cc['gain'])
 
         return JSONResponse(content=jsonable_encoder({"filename":app.snapshot_filename}))
 

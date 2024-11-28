@@ -458,7 +458,7 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
     myimg=np.reshape(myimg, (ih, iw))   # Forme tableau X,Y de l'image moyenne
     
     # sauve en fits l'image moyenne avec suffixe _mean
-    savefich="Complements"+os.path.sep+basefich+'_mean'              
+    savefich=basefich+'_mean'              
     SaveHdu=fits.PrimaryHDU(myimg,header=hdr)
     SaveHdu.writeto(os.path.join(WorkDir,savefich+'.fits'),overwrite=True)
     
@@ -860,7 +860,7 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
             img_suff.append("_dp"+str(range_dec[i]))
         else:
             img_suff.append('')
-            DiskHDU.writeto(os.path.join(WorkDir,"Complements"+os.path.sep+basefich+img_suff[i]+'_raw.fits'),overwrite='True')
+            DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[i]+'_raw.fits'),overwrite='True')
 
     if flag_display:
         cv2.destroyAllWindows()
