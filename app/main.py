@@ -587,7 +587,7 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     else:
         print(f"The directory {scan.filename} does not exist.")
 
-@app.post("/sunscan/snapshots/delete/all/", response_class=JSONResponse)
+@app.get("/sunscan/snapshots/delete/all/", response_class=JSONResponse)
 async def deleteAllSnapshots(background_tasks: BackgroundTasks):
     """
     Delete all snapshots.
