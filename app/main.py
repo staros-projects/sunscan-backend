@@ -613,7 +613,7 @@ async def shutdownSUNSCAN():
     os.system("sudo shutdown -h now")
     return JSONResponse(content={"message": "Shutdown ok"}, status_code=200)
 
-@app.get("/sunscan/reboot", response_class=JSONResponse)
+@app.post("/sunscan/reboot", response_class=JSONResponse)
 async def rebootSUNSCAN():
     os.system("sudo shutdown -r now")
     return JSONResponse(content={"message": "Reboot ok"}, status_code=200)
