@@ -32,13 +32,16 @@ The Sunscan backend provides server-side functionality for the Sunscan applicati
 
 2. Create a virtual environment (optional but recommended):
    ```
-   python -m venv venv
+   python -m venv --system-site-packages venv
    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
    ```
 
 3. Install the required dependencies:
    ```
-   pip install -r requirements.txt
+   sudo apt-get install gcc python3-dev
+   sudo apt-get install -y libcap-dev libcamera-dev python3-libcamera python3-pyqt5 python3-prctl libatlas-base-dev ffmpeg
+   pip install -r app/requirements.txt
+   sudo apt-get install uvicorn
    ```
 
 ## Configuration
@@ -60,7 +63,8 @@ To start the backend server:
 
 2. Run the following command:
    ```
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   cd app
+   python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
    ```
 
@@ -79,6 +83,13 @@ To start the backend server:
 4. You can now access the API endpoints using this address.
 
 Note: Make sure all required environment variables are set and the database is properly configured before starting the server. Refer to the configuration section for more details.
+
+## Hotspot
+
+Configure the hotspot by the script:
+```
+sudo  system/usr/local/bin/configure_hotspot.sh
+```
 
 
 ## Mobile Application
