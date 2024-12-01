@@ -587,6 +587,27 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     else:
         print(f"The directory {scan.filename} does not exist.")
 
+@app.post("/sunscan/snapshots/delete/all/", response_class=JSONResponse)
+async def deleteAllSnapshots(background_tasks: BackgroundTasks):
+    """
+    Delete all snapshots.
+
+    Args:
+        background_tasks (BackgroundTasks): FastAPI's background tasks handler.
+    
+    Returns:
+        None: This endpoint doesn't return a response directly.
+    """
+    dirToClean = './storage/snapshots/'
+    for item in os.listdir(dirToClean):
+        item_path = os.path.join(folder_path, item)
+        if os.path.isfile(item_path):
+            os.remove(item_path)  
+        print(f"The directory {dirToClean} ws cleared.")
+    else:
+        print(f"The directory {dirToClean} does not exist.")
+
+
 @app.get("/sunscan/shutdown", response_class=JSONResponse)
 async def shutdownSUNSCAN():
     os.system("sudo shutdown -h now")
