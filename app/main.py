@@ -600,7 +600,7 @@ async def deleteAllSnapshots(background_tasks: BackgroundTasks):
     """
     dirToClean = './storage/snapshots/'
     for item in os.listdir(dirToClean):
-        item_path = os.path.join(folder_path, item)
+        item_path = os.path.join(dirToClean, item)
         if os.path.isfile(item_path):
             os.remove(item_path)  
         print(f"The directory {dirToClean} ws cleared.")

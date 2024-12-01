@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import {  downloadSnapshot, getSnapshots } from '../api';
+import {  downloadSnapshot, getSnapshots, deleteAllSnapshots } from '../api';
 import Layout from './Layout';
 
 // composant pour afficher la liste des dossiers par dates (racine du dossier storaage/scans)
@@ -8,16 +8,40 @@ import Layout from './Layout';
 const SnapshotsDashboard = () => {
   const [snapshots, setSnapshots] = useState([]);
 
+
   useEffect(() => {
-    getSnapshots().then((items)=>{
-      // Sort by the name field
+    refreshSnapshots();
+  }, []);
+
+  const refreshSnapshots = () => {
+    getSnapshots().then((items) => {
       const sortedItems = items.sort((a, b) => a.name.localeCompare(b.name));
       setSnapshots(sortedItems);
     });
-  }, []);
+  };
+
+  
+  const handleDeleteAll = () => {
+    if (window.confirm('Are you sure you want to delete all snapshots? This action cannot be undone.')) {
+      deleteAllSnapshots()
+        .then(() => {
+          alert('All snapshots have been successfully deleted.');
+          refreshSnapshots(); // Refresh the list after deletion
+        })
+        .catch((error) => {
+          console.error('Error deleting snapshots:', error);
+          alert('An error occurred while deleting snapshots.');
+        });
+    }
+  };
 
   return (
     <Layout title="SUNSCAN Gallery : snapshots" backLink={`/`}>
+      <div style={{ marginBottom: '20px', textAlign: 'right' }}>
+        <button onClick={handleDeleteAll} className="delete-all-button" style={{ padding: '10px 15px', background: 'red', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+          Delete All Snapshots
+        </button>
+      </div>
       <div className="folder-grid">
         {snapshots.map(snapshot => (
           <Link onClick={() => downloadSnapshot(snapshot.name)} key={snapshot.name} className="folder-item">

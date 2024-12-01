@@ -10,6 +10,12 @@ export async function getSnapshots() {
   return response.json();
 }
 
+
+export async function deleteAllSnapshots() {
+  const response = await fetch(`${API_URL}/sunscan/snapshots/delete/all/`);
+  return response.json();
+}
+
 export function downloadSnapshot(imageName) {
   window.location.href = `${API_URL}/download/snapshot/${imageName}`;
 }
