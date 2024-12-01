@@ -1,9 +1,10 @@
-
 import time
 import cv2
 import numpy as np
+from pathlib import Path
 from libcamera import controls
 from picamera2 import Picamera2, Controls
+from picamera2.platform import Platform
 from numba import jit
 
 def getMaxAduValue(array):
@@ -37,8 +38,12 @@ class IMX477Camera_CSI():
             tuple: Sensor size (width, height).
         """
         # load the default tuning file
-        tuning = Picamera2.load_tuning_file("imx477_scientific.json")
-        #tuning = Picamera2.load_tuning_file("imx477.json")
+        directory = Path(__file__).parent.absolute()
+        # pisp is used on Raspberry Pi 5 and later
+        is_pisp = Picamera2.platform == Platform.PISP
+        tuning_file = "imx477_scientific_pisp.json" if is_pisp else "imx477_scientific.json"
+        print(f"Load tuning_file: {tuning_file} in {directory}")
+        tuning = Picamera2.load_tuning_file(tuning_file, directory)
         contrast_algo = Picamera2.find_tuning_algo(tuning, "rpi.contrast")
         gamma_curve = contrast_algo["gamma_curve"]
         contrast_algo["ce_enable"] = 0
