@@ -43,7 +43,7 @@ from starlette.responses import FileResponse
 
 from storage import *
 from camera import *
-from power import PowerHelper
+from power import factory_power_helper
 from camera_controller import CameraController
 
 from process import process_scan, get_fits_header
@@ -129,7 +129,7 @@ print((current_dt_overlay))
 current_camera = "imx219" if "imx219" in current_dt_overlay else "imx477"
 
 # Initialize power management helper
-power = PowerHelper()
+power = factory_power_helper()
 
 def getCameraControls():
     """

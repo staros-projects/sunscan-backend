@@ -1,6 +1,41 @@
 import subprocess
+import socket
 import logging
 import requests
+
+def factory_power_helper():
+    if is_battery_system_available():
+        return PowerHelper()
+    else:
+        return MockPowerHelper()
+
+
+def is_battery_system_available():
+    try:
+        # Vérifier si le port est ouvert
+        with socket.create_connection(("127.0.0.1", 8423), timeout=1) as sock:
+            # Tester la commande `get battery`
+            ps = subprocess.Popen(('echo', 'get battery'), stdout=subprocess.PIPE)
+            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
+            ps.wait()
+            result_str = result.decode('utf-8').rstrip()
+            # Si une réponse valide est reçue, le système est disponible
+            return "battery" in result_str.lower()
+    except (socket.error, subprocess.CalledProcessError, ValueError):
+        # Si une exception est levée, le système n'est pas disponible
+        return False
+
+
+class MockPowerHelper:
+    def get_battery(self):
+        return 42.0
+    def battery_power_plugged(self):
+        return False
+    def set_next_boot_datetime(self, datetime):
+        return True
+    def sync_time(self):
+        pass
+
 
 class PowerHelper:
     """A helper class for managing power-related functions."""
