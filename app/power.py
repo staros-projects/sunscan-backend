@@ -100,24 +100,6 @@ class PowerHelper:
             self.logger.info('Invalid battery output')
         return battery_power_plugged
 
-    def set_next_boot_datetime(self, datetime):
-        """
-        Set the next boot datetime.
-
-        Args:
-            datetime: The datetime for the next boot.
-
-        Returns:
-            bool: Always returns True (placeholder implementation).
-
-        Note:
-            This is a placeholder method. The actual implementation for
-            scheduling the next boot is not yet available.
-        """
-        # TODO: For directly scheduling next boot instead of using PiSugar's web interface
-        # Currently, it can be done manually through the PiSugar web interface
-        return True
-
     def sync_time(self):
         """
         Synchronize the PiSugar RTC with the current system time.
