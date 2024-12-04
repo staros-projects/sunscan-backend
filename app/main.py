@@ -50,7 +50,7 @@ from process import process_scan, get_fits_header
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.2.0'
+BACKEND_API_VERSION = '1.2.1'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -608,7 +608,7 @@ async def deleteAllSnapshots(background_tasks: BackgroundTasks):
         print(f"The directory {dirToClean} does not exist.")
 
 
-@app.get("/sunscan/shutdown", response_class=JSONResponse)
+@app.post("/sunscan/shutdown", response_class=JSONResponse)
 async def shutdownSUNSCAN():
     os.system("sudo shutdown -h now")
     return JSONResponse(content={"message": "Shutdown ok"}, status_code=200)
