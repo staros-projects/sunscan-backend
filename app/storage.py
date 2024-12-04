@@ -122,12 +122,15 @@ def get_scans(path='storage/scans/', withDetails=False):
             s['status'] = 'failed'
 
         if os.path.exists(os.path.join(s['path'], 'sunscan_conf.txt')):
-            try:
-                d = open(os.path.join(s['path'], 'sunscan_conf.txt'))
-                c = json.load(d)
-                s['configuration'] = c
-            except:
-                pass
+        with open(os.path.join(s['path'], 'sunscan_conf.txt')) as d:
+            c = json.load(d)
+            s['configuration'] = c
+        except FileNotFoundError:
+            # Le fichier n'existe pas, on passe simplement
+            pass 
+        except Exception as e:
+            # Vous pouvez gérer d'autres erreurs ici (par exemple, des erreurs de parsing JSON)
+            pass
         scans_with_status.append(s)
     return scans_with_status  
     
