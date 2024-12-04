@@ -125,8 +125,6 @@ def get_scans(path='storage/scans/', withDetails=False):
             with open(os.path.join(s['path'], 'sunscan_conf.txt')) as d:
                 c = json.load(d)
                 s['configuration'] = c
-        except FileNotFoundError:
-            pass 
         except Exception as e:
             pass
         scans_with_status.append(s)
