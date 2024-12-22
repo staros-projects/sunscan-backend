@@ -37,8 +37,10 @@ _IP=\$(hostname -I) || true
 if [ "\$_IP" ]; then
   printf "My IP address is %s\n" "\$_IP"
 fi
-/usr/local/bin/rename_hotspot.sh & exit 0
+
 EOF
+
+chmod +x /etc/rc.local
 
 cat << EOF > /var/www/sunscan-backend/reset_hotspot.sh
 #!/bin/bash
@@ -55,3 +57,52 @@ fi
 EOF
 
 chmod +x /var/www/sunscan-backend/reset_hotspot.sh
+
+cat << EOF > /usr/local/bin/configure_hotspot.sh
+#!/bin/bash
+
+CONNECTION_DIR="/etc/NetworkManager/system-connections/"
+HOTSPOT_FILE=\$(grep -rl "ssid=sunscan-" \$CONNECTION_DIR)
+
+echo "Hotspot file: \$HOTSPOT_FILE"
+
+if [ -f "\$HOTSPOT_FILE" ]; then
+  echo "Hotspot already configured"
+else
+  nmcli radio wifi on
+
+  INTERFACE="wlan0"
+
+  # Configuration du hotspot
+  SSID="sunscan-default"
+  PASSWORD="SunScanByStaros"
+
+  nmcli con add type wifi ifname "\$INTERFACE" con-name hotspot autoconnect yes ssid "\$SSID"
+  nmcli con modify hotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk "\$PASSWORD"
+  nmcli con modify hotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared
+  nmcli con up hotspot
+fi
+
+/usr/local/bin/rename_hotspot.sh
+EOF
+
+chmod +x /usr/local/bin/configure_hotspot.sh
+
+# Add systemd service to configure hotspot
+cat << EOF > /etc/systemd/system/configure_hotspot.service
+[Unit]
+Description=Configure Hotspot
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/configure_hotspot.sh
+Restart=on-failure
+RestartSec=5s
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable configure_hotspot.service
