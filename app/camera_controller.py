@@ -58,7 +58,7 @@ class CameraController:
         self._sensor_size = self._camera.init()
         self._crop_height = 280
         self._crop_y = int((self._sensor_size[1] / 2) - (self._crop_height / 2))
-        self._preview_crop_height = 1600
+        self._preview_crop_height = 3000 
         self._preview_crop_y = int((self._sensor_size[1] / 2) - (self._preview_crop_height / 2))
         
     def _thread_func(self):  

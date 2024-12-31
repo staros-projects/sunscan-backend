@@ -5,8 +5,10 @@ import datetime
 import numpy as np
 from astropy.io import fits
 from Inti_recon import solex_proc 
+from PIL import Image, ImageDraw, ImageFont, ImageChops
+from datetime import datetime
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0):
+def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer=''):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -70,16 +72,16 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
         
-        header = update_header(WorkDir, header)
+        header = update_header(WorkDir, header, observer)
         # Create and save surface image
-        create_surface_image(WorkDir, frames, surfaceSharpLevel, header)
+        create_surface_image(WorkDir, frames, surfaceSharpLevel, header, observer)
         # Create and save continuum image
-        create_continuum_image(WorkDir, frames, contSharpLevel, header)
+        create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
         # Create and save prominence (protus) image
-        create_protus_image(WorkDir, frames, cercle, proSharpLevel, header)
+        create_protus_image(WorkDir, frames, cercle, proSharpLevel, header, observer)
         # If doppler contrast is enabled, create and save doppler image
         if dopcont:
-            create_doppler_image(WorkDir, frames, header)
+            create_doppler_image(WorkDir, frames, header, observer)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -88,20 +90,20 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         # Call the callback function to indicate failure
         callback(serfile, 'failed')
 
-def update_header(path, header):
+def update_header(path, header, observer):
     if os.path.exists(os.path.join(path, 'sunscan_conf.txt')):
         d = open(os.path.join(path, 'sunscan_conf.txt'))
         try:
             c = json.load(d)
             header['EXPTIME']=int(c['exposure_time']/1000)
             header['GAIN']=c['gain']
-            header['OBSERVER']='SUNSCAN'
+            header['OBSERVER']=observer
             header['INSTRUME']='SUNSCAN'
             header['TELESCOP']='SUNSCAN'
             header['OBJNAME']='Sun'
         except Exception as e:
             print("error update header", e)
-        return header
+    return header
 
 
 def sharpenImage(image, level):
@@ -127,7 +129,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, level, header):
+def create_surface_image(wd, frames, level, header, observer):
     """
     Create and save various surface images of the sun.
 
@@ -181,18 +183,56 @@ def create_surface_image(wd, frames, level, header):
     cc = sharpenImage(cc, level)
    
     # Save CLAHE image as PNG and JPG
-    cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'),cc/256)
-    cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
-    save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
-    # Create and save a smaller preview image
-    ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
-    cv2.imwrite(os.path.join(wd, 'sunscan_preview.jpg'),ccsmall)
-    print(os.path.join(wd, 'sunscan_preview.jpg'))
+    try:
+        cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'), apply_watermark_if_enable(cc//256,header,observer))
+        cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
+        save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
+        # Create and save a smaller preview image
+        ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
+        cv2.imwrite(os.path.join(wd, 'sunscan_preview.jpg'),ccsmall)
+        print(os.path.join(wd, 'sunscan_preview.jpg'))
+    except Exception as e:
+        print(e)
+    Colorise_Image('auto', cc, wd, header, observer)
 
-    Colorise_Image('auto', cc, wd)
+def apply_watermark_if_enable(frame, header, observer):
+    print('watermark', observer)
+    if not observer:
+        return image
+    # Ensure the frame is in uint8 format
+    if frame.dtype != np.uint8:
+        frame = frame.astype(np.uint8)  # Normalize if in float
+
+    formatted_date = ''
+    if header and 'DATE-OBS' in header and header['DATE-OBS']:
+        try:
+            # Convert to datetime object using strptime
+            datetime_obj = datetime.strptime(header['DATE-OBS'][:23], '%Y-%m-%dT%H:%M:%S.%f')
+            # Convert to desired format (YYYY-MM-DD HH:MM:SS)
+            formatted_date = datetime_obj.strftime('%Y-%m-%d %H:%M:%S')
+        except Exception as e:
+            print(e)
+
+    image = Image.fromarray(frame)
+    draw = ImageDraw.Draw(image) 
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 30)  # Use a specific font if available
+    text_position = get_text_position(image)
+    draw.text(text_position, formatted_date, fill="white", font=font)
+
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
+    draw.text(get_text_position(image, 126), 'SUNSCAN', fill="white", font=font)
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Thin.ttf", 30)  # Use a specific font if available
+    draw.text(get_text_position(image, 84), observer, fill="white", font=font)
+    return np.array(image)
+
+def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
+     # Get the image dimensions to position the text in the bottom-left corner
+    width, height = image.size
+    # Position the text in the bottom-left corner with some padding
+    return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
 
 
-def create_continuum_image(wd, frames, level, header):
+def create_continuum_image(wd, frames, level, header, observer):
     """
     Create and save a continuum image of the sun.
 
@@ -223,12 +263,12 @@ def create_continuum_image(wd, frames, level, header):
         cc = sharpenImage(cc, level)
 
         # save as png
-        cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),cc/256)
+        cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer))
         cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, frames, cercle, level, header):
+def create_protus_image(wd, frames, cercle, level, header, observer):
     """
     Create and save a prominence (protus) image of the sun.
 
@@ -296,10 +336,10 @@ def create_protus_image(wd, frames, cercle, level, header):
     cc = sharpenImage(cc, level)  # Sharpen the image
 
     # Save as PNG and JPG
-    cv2.imwrite(os.path.join(wd, 'sunscan_protus.jpg'), cc / 256)
+    cv2.imwrite(os.path.join(wd, 'sunscan_protus.jpg'), apply_watermark_if_enable(cc//256,header,observer))
     cv2.imwrite(os.path.join(wd, 'sunscan_protus.png'), cc)
 
-def create_doppler_image(wd, frames, header):
+def create_doppler_image(wd, frames, header, observer):
     """
     Create and save a Doppler image of the sun.
 
@@ -328,7 +368,7 @@ def create_doppler_image(wd, frames, header):
             img_doppler=cv2.flip(img_doppler,0)
 
             # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),img_doppler/256)
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
                 
         except:
@@ -406,7 +446,7 @@ def adjust_gamma(image, gamma=1.0):
 	# apply gamma correction using the lookup table
 	return cv2.LUT(image, table)
 
-def Colorise_Image (couleur_lbl, frame_contrasted, wd):
+def Colorise_Image (couleur_lbl, frame_contrasted, wd, header, observer):
     # gestion couleur auto ou sur dropdown database compatibility
     # 'Manual','Ha','Ha2cb','Cah','Cah1v','Cak','Cak1v','HeID3'
     if couleur_lbl == 'auto' :
@@ -472,7 +512,7 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd):
             cc[cc<0]=0
             img_color=cc
 
-        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),img_color)
+        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),apply_watermark_if_enable(img_color, header, observer))
         return img_color
 
 def save_as_fits(path, image, header):

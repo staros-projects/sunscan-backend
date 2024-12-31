@@ -47,6 +47,8 @@ from power import factory_power_helper
 from camera_controller import CameraController
 
 from process import process_scan, get_fits_header
+from animate import *
+from dedistor import *
  
 from pydantic import BaseModel
 
@@ -70,6 +72,7 @@ class Scan(ScanBase):
     pro_sharpen_level: int
     cont_sharpen_level: int
     offset: int
+    observer: str
 
 class CameraControls(BaseModel):
     exp: float
@@ -217,6 +220,42 @@ async def paginated_scans(page: int = 1, size: int = 10):
         JSONResponse: A JSON array containing information about each scan.
     """
     scans = get_paginated_scans(page, size)
+    return JSONResponse(content=jsonable_encoder(scans))
+
+@app.get("/sunscan/stacked", response_class=JSONResponse)
+async def paginated_stacked_scans(page: int = 1, size: int = 10):
+    """
+    Retrieve a list of all available stacked scans.
+    
+    This endpoint returns information about all scans stored in the system.
+    It's used to provide an overview of available scan data to the user
+    or other parts of the application.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON array containing information about each scan.
+    """
+    scans = get_paginated_scans(page, size, get_stacked_scans)
+    return JSONResponse(content=jsonable_encoder(scans))
+
+@app.get("/sunscan/animated", response_class=JSONResponse)
+async def paginated_animated_scans(page: int = 1, size: int = 10):
+    """
+    Retrieve a list of all available animated scans.
+    
+    This endpoint returns information about all scans stored in the system.
+    It's used to provide an overview of available scan data to the user
+    or other parts of the application.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: A JSON array containing information about each scan.
+    """
+    scans = get_paginated_scans(page, size, get_animated_scans)
     return JSONResponse(content=jsonable_encoder(scans))
 
 @app.get("/camera/imx477/connect", response_class=JSONResponse)
@@ -587,6 +626,28 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     else:
         print(f"The directory {scan.filename} does not exist.")
 
+@app.post("/sunscan/scans/delete/", response_class=JSONResponse)
+async def deleteScans(data: AnimationRequest):
+    """
+    Delete multiple scan directories.
+    
+    This endpoint removes a specified scan directory and all its contents.
+    It's used for managing storage and removing unwanted scan data.
+    
+    Args:
+        scan (Scan): A model containing the filename of the scan to be deleted.
+        background_tasks (BackgroundTasks): FastAPI's background tasks handler.
+    
+    Returns:
+        None: This endpoint doesn't return a response directly.
+    """
+    for p in data.paths:
+        if os.path.exists(p):
+            shutil.rmtree(p)
+            print(f"The directory {p} has been deleted.")
+        else:
+            print(f"The directory {p} does not exist.")
+
 @app.get("/sunscan/snapshots/delete/all/", response_class=JSONResponse)
 async def deleteAllSnapshots(background_tasks: BackgroundTasks):
     """
@@ -641,7 +702,104 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
         None: The processing is done in the background, so no immediate return.
     """
     if (os.path.exists(scan.filename)):
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset)
+        print(scan)
+        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer)
+
+
+@app.post("/sunscan/process/stack/")
+def process_stack(request: AnimationRequest):
+    required_files = {"clahe": False, "protus": False, "cont": False}
+    for required_file, status in required_files.items():
+        matching_paths = []
+        for path_str in request.paths:
+            path = Path(os.path.join(os.path.dirname(path_str) , "sunscan_"+required_file+".png"))
+            if path.exists():
+                matching_paths.append(path)
+        if len(matching_paths) == len(request.paths):
+            required_files[required_file] = True
+    stack(request.paths, required_files)
+     
+@app.post("/sunscan/process/animate/")
+def process_animate(request: AnimationRequest):
+    # Supported filenames and output GIF names
+    required_files = ["sunscan_clahe.png", "sunscan_protus.png", "sunscan_cont.png"]
+    gif_names = {
+        "sunscan_clahe.png": "animated_clahe.gif",
+        "sunscan_protus.png": "animated_protus.gif",
+        "sunscan_cont.png": "animated_cont.gif",
+    }
+
+    gifs_created = []
+
+    stacking_dir = './storage/animations'
+    if not os.path.exists(stacking_dir):
+        os.mkdir(stacking_dir)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    work_dir = os.path.join(stacking_dir, timestamp)
+    if not os.path.exists(work_dir):
+        os.mkdir(work_dir)
+
+    # Check for each required file type and generate GIFs if possible
+    for required_file in required_files:
+        matching_paths = []
+
+        for path_str in request.paths:
+            path = Path(os.path.dirname(path_str)) / required_file
+            print(path)
+
+            if path.exists():
+                matching_paths.append(path)
+
+        # Create GIF if all paths contain the required file
+        if len(matching_paths) == len(request.paths):
+
+           
+
+            output_gif_path = os.path.join(work_dir, gif_names[required_file])
+            create_gif(matching_paths, request.watermark, request.observer, output_gif_path, request.frame_duration, request.display_datetime, request.resize_gif, request.bidirectional, request.add_average_frame)
+            gifs_created.append(str(output_gif_path))
+
+    if not gifs_created:
+        raise HTTPException(status_code=400, detail="No GIFs were created. Ensure the required files exist.")
+
+    return {"message": "GIFs created successfully", "gifs": gifs_created}
+
+class FileTagRequest(BaseModel):
+    filename: str
+    tag: str
+
+@app.post("/sunscan/scan/tag/")
+async def create_tag_file(request: FileTagRequest):
+    directory = request.filename
+    tag = request.tag
+
+
+    # Check if the directory exists
+    if not os.path.exists(directory):
+        raise HTTPException(status_code=400, detail="The specified directory does not exist.")
+
+    # Remove all files starting with tag_ in the directory
+    for file in os.listdir(directory):
+        if file.startswith("tag_"):
+            try:
+                os.remove(os.path.join(directory, file))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error removing file {file}: {str(e)}")
+
+    # Construct the full path for the tag_<tag> file
+    tag_filename = os.path.join(directory, f"tag_{tag}")
+
+    try:
+        # Write an empty file with the name tag_<tag>
+        with open(tag_filename, "w") as f:
+            f.write("")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating the file: {str(e)}")
+
+    return {"message": f"File '{tag_filename}' created successfully."}
+
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

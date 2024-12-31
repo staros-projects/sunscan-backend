@@ -38,7 +38,6 @@ class IMX477Camera_CSI():
         """
         # load the default tuning file
         tuning = Picamera2.load_tuning_file("imx477_scientific.json")
-        #tuning = Picamera2.load_tuning_file("imx477.json")
         contrast_algo = Picamera2.find_tuning_algo(tuning, "rpi.contrast")
         gamma_curve = contrast_algo["gamma_curve"]
         contrast_algo["ce_enable"] = 0
@@ -125,7 +124,7 @@ class IMX477Camera_CSI():
                 case 1:  # red layer
                     array_16bit = (array[:, 1::2][1::2] * depth_conv) - offset/4
                 case 2:  # green layer
-                    array_16bit = (array[:, 0::2][1::2]+array[:, 1::2][::2] * depth_conv) - offset/4
+                    array_16bit = ((array[:, 0::2][1::2]+array[:, 1::2][::2]) * depth_conv/2) - offset/4
                 case 3:  # blue layer
                     array_16bit = (array[:, 0::2][::2] * depth_conv) - offset/4
   
