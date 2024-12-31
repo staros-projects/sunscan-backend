@@ -5,10 +5,11 @@ from scipy.fft import fft2, ifft2, fftshift
 from astropy.io import fits
 import imageio.v2
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
-from process import sharpenImage, apply_watermark_if_enable
+from process import sharpenImage, get_text_position
 
 # ------------------------------------
 # CROSS_CORRELATE_SHIFT_FFT
@@ -190,7 +191,7 @@ def correct_image_png(input_name, dx_map, dy_map):
     return corrected_image
 
 
-def stack(paths, status):
+def stack(paths, status, observer):
     if not status['clahe']:
         return 
 
@@ -206,8 +207,26 @@ def stack(paths, status):
         cont_sum_image = imageio.v2.imread(cont_deformed_root )
         cont_sum_image = cont_sum_image.astype(np.uint32) 
     i = 1
+    tag_value = ''
+    acquisition_dates = []
     for p in paths:
         print('Stack #'+str(i))
+
+        # Check for tag_ file and set tag accordingly
+        if not tag_value:
+            tag_files = [f for f in os.listdir(os.path.dirname(p)) if f.startswith('tag_')]
+            if tag_files:
+                tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_' 
+
+        dirname = os.path.dirname(p)
+        
+        date_str = dirname.split('/')[-1].split('-')[-2].replace('sunscan_', '') 
+        time_str = dirname.split('/')[-1].split('-')[-1] 
+        print(date_str, time_str)
+        full_datetime_str = f"{date_str} {time_str.replace('_', ':')}"
+        dt = datetime.strptime(full_datetime_str, "%Y_%m_%d %H:%M:%S")
+        acquisition_dates.append(dt)
+
         # Calcul des cartes de d�calage
         # patch_size : taille du patch de cross-corr�lation
         # step_size : pas de cross-corr�lation (en X et Y)
@@ -236,16 +255,46 @@ def stack(paths, status):
     if not os.path.exists(stacking_dir):
         os.mkdir(stacking_dir)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    formatted_avg_datetime = None
+    if acquisition_dates:
+        avg_timestamp = sum([dt.timestamp() for dt in acquisition_dates]) / len(acquisition_dates)
+        avg_datetime = datetime.fromtimestamp(avg_timestamp)
+        formatted_avg_datetime = avg_datetime.strftime("%Y/%m/%d %H:%M:%S")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") 
     work_dir = os.path.join(stacking_dir, timestamp)
     if not os.path.exists(work_dir):
         os.mkdir(work_dir)
 
-    write_images(work_dir, sum_image, 'clahe', i-1)
-    if status['cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1)
+    watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime+' '+tag_value
 
-def write_images(work_dir, sum_image, type, scan_count):
+    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt, observer)
+    if status['cont']: 
+        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer)
+
+
+def apply_watermark_if_enable(frame, text, observer):
+    print('watermark', observer)
+    if not observer:
+        return frame
+    # Ensure the frame is in uint8 format
+    if frame.dtype != np.uint8:
+        frame = frame.astype(np.uint8)  # Normalize if in float
+
+    image = Image.fromarray(frame)
+    draw = ImageDraw.Draw(image) 
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 30)  # Use a specific font if available
+    text_position = get_text_position(image)
+    draw.text(text_position, text, fill="white", font=font)
+
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
+    draw.text(get_text_position(image, 126), 'SUNSCAN', fill="white", font=font)
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Thin.ttf", 30)  # Use a specific font if available
+    draw.text(get_text_position(image, 84), observer, fill="white", font=font)
+    return np.array(image)
+
+
+def write_images(work_dir, sum_image, type, scan_count, text, observer):
     sum_image = sum_image / scan_count
     sum_image = sum_image.astype(np.uint16)
 
@@ -255,10 +304,10 @@ def write_images(work_dir, sum_image, type, scan_count):
     sum_image = sum_image.astype(np.uint16)
 
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
-    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), sum_image/256)
+    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
     sum_image = sharpenImage(sum_image, 1 if scan_count<6 else 2)
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
-    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), sum_image/256)
+    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
 
 
     ccsmall = cv2.resize(sum_image/256,  (0,0), fx=0.4, fy=0.4)    

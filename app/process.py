@@ -198,7 +198,7 @@ def create_surface_image(wd, frames, level, header, observer):
 def apply_watermark_if_enable(frame, header, observer):
     print('watermark', observer)
     if not observer:
-        return image
+        return frame
     # Ensure the frame is in uint8 format
     if frame.dtype != np.uint8:
         frame = frame.astype(np.uint8)  # Normalize if in float

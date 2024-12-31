@@ -717,7 +717,7 @@ def process_stack(request: AnimationRequest):
                 matching_paths.append(path)
         if len(matching_paths) == len(request.paths):
             required_files[required_file] = True
-    stack(request.paths, required_files)
+    stack(request.paths, required_files, request.observer)
      
 @app.post("/sunscan/process/animate/")
 def process_animate(request: AnimationRequest):
