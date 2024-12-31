@@ -121,6 +121,8 @@ dmypy.json
 /app/storage/raw/*
 /app/storage/scans/*
 /app/storage/snapshots/*
+/app/storage/stacking/*
+/app/storage/animations/*
 /app/storage/tmp/*
 /app/storage/tmp/test/*
 app/main_dev.py
