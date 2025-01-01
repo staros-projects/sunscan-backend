@@ -304,7 +304,7 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
 
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
-    sum_image = sharpenImage(sum_image, 1 if scan_count<6 else 2)
+    sum_image = sharpenImage(sum_image, 1 if scan_count<8 else 2)
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
 
