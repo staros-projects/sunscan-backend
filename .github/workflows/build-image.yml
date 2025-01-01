@@ -1,0 +1,147 @@
+name: Builds the Sunscan OS image
+
+on:
+  pull_request:
+  push:
+    tags:
+      - '*.*.*'
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine version
+        id: vars
+        run: |
+          # Get the tag, if any
+          TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+          
+          if [ -n "$TAG" ]; then
+            echo "APP_VERSION=$TAG" >> $GITHUB_ENV
+            echo "IMGFILENAME=sunscan_os_$TAG" >> $GITHUB_ENV
+          else
+            BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            COMMIT=$(git rev-parse --short HEAD)
+            echo "APP_VERSION=${BRANCH}_${COMMIT}" >> $GITHUB_ENV
+            echo "IMGFILENAME=sunscan_os_${BRANCH}_${COMMIT}" >> $GITHUB_ENV
+          fi
+      - run: |
+          {
+          mkdir -p pi-gen-sunscan/01-prepare-repo
+          cat > pi-gen-sunscan/01-prepare-repo/00-run.sh <<-EOF
+          #!/bin/bash
+          git clone ${{ github.server_url }}/${{ github.repository }}.git --branch ${{ github.head_ref }} --depth 1 \${WORK_DIR}/tmp/repo
+          
+          EOF
+          } &&
+          chmod +x pi-gen-sunscan/01-prepare-repo/00-run.sh
+
+      - uses: usimd/pi-gen-action@v1
+        id: build
+        with:
+          compression: xz
+
+          # Compression level to be used. From 0 to 9 (refer to the tool man page for more
+          # information on this. Usually 0 is no compression but very fast, up to 9 with the
+          # best compression but very slow).
+          compression-level: 6
+
+          # Enable SSH access to Pi.
+          enable-ssh: 1
+
+          export-last-stage-only: true
+
+          # Comma or whitespace separated list of additional packages to install on host
+          # before running pi-gen. Use this list to add any packages your custom stages may
+          # require. Note that this is not affecting the final image. In order to add
+          # additional packages, you need to add a respective 'XX-packages' file in your
+          # custom stage.
+          extra-host-dependencies: ''
+
+          # Comma or whitespace separated list of additional modules to load on host before
+          # running pi-gen. If your custom stage requires additional software or kernel
+          # modules to be loaded, add them here. Note that this is not meant to configure
+          # modules to be loaded in the target image.
+          extra-host-modules: ''
+
+          # Token to use for checking out pi-gen repo.
+          github-token: ${{ github.token }}
+
+          # Host name of the image.
+          hostname: sunscan
+
+          # Final image name.
+          image-name: ${{ env.IMGFILENAME }}
+
+          # Enabling this option will remove plenty of components from the GitHub Actions
+          # runner that are not mandatory pre-requisites for a (vanilla) pi-gen build. This
+          # shall increase the available disk space so that also large images can be
+          # compiled on a free GHA runner (benchmark is the full image including a desktop
+          # environment). If any packages are missing during the build consider adding them
+          # to the `extra-host-dependencies` list.
+          increase-runner-disk-size: false
+
+          # Default keyboard keymap.
+          keyboard-keymap: us
+
+          # Default keyboard layout.
+          keyboard-layout: English (US)
+
+          # Default locale of the system image.
+          locale: en_US.UTF-8
+
+          # Password of the intial user account, locked if empty.
+          password: 'sunscan'
+
+          # Path where selected pi-gen ref will be checked out to. If the path does not yet
+          # exist, it will be created (including its parents).
+          pi-gen-dir: pi-gen
+
+          # The release name to use in `/etc/issue.txt`. The default should only be used for
+          # official Raspberry Pi builds.
+          pi-gen-release: Raspberry Pi reference
+
+          # GitHub repository to fetch pi-gen from, must be a fork from RPi-Distro/pi-gen.
+          pi-gen-repository: RPi-Distro/pi-gen
+
+          # Release version of pi-gen to use. This can both be a branch or tag name known in
+          # the pi-gen repository.
+          pi-gen-version: arm64
+
+          # Setting to `1` will disable password authentication for SSH and enable public
+          # key authentication. Note that if SSH is not enabled this will take effect when
+          # SSH becomes enabled.
+          pubkey-only-ssh: 0
+
+          # The release version to build images against. Valid values are jessie, stretch,
+          # buster, bullseye, bookworm, and testing.
+          release: bookworm
+
+          # List of stage name to execute in given order. Relative and absolute paths to
+          # custom stage directories are allowed here. Note that by default pi-gen exports
+          # images in stage2 (lite), stage4 and stage5. You probably want to hook in custom
+          # stages before one of the exported stages. Otherwise, the action will make sure
+          # any custom stage will include an image export directive.
+          stage-list: stage0 stage1 stage2 ./pi-gen-sunscan
+
+          # System timezone.
+          timezone: Europe/Paris
+
+          # Name of the initial user account.
+          username: admin
+
+          # Print all output from pi-gen.
+          verbose-output: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.IMGFILENAME }}
+          path: ${{ steps.build.outputs.image-path }}
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+            files: ${{ steps.build.outputs.image-path }}
