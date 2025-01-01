@@ -8,11 +8,13 @@ from pathlib import Path
 from typing import List, Optional
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
+from storage import get_scan_tag
 
-class AnimationRequest(BaseModel):
+class PostProcessRequest(BaseModel):
     paths: List[str]
     watermark: bool = False
     observer: str = ''
+    description: str = ''
     frame_duration: int = 200  # Default frame duration in ms
     display_datetime: bool = False  # Whether to display datetime on each frame
     resize_gif: bool = True  # Whether to resize GIF to 50% of original size
@@ -88,7 +90,9 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
         # Extract the datetime from the path and format it
         datetime_str = extract_datetime_from_path(str(image_path))
         if display_datetime:
-            frame = add_datetime_to_frame(frame, datetime_str)
+            tag = get_scan_tag(os.path.dirname(image_path))
+            txt = datetime_str if not tag else datetime_str+" - "+tag
+            frame = add_datetime_to_frame(frame, txt)
         if watermark:
             frame = add_watermark(frame, observer)
         if resize_gif:

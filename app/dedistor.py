@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
 from process import sharpenImage, get_text_position
+from storage import get_scan_tag
 
 # ------------------------------------
 # CROSS_CORRELATE_SHIFT_FFT
@@ -207,18 +208,14 @@ def stack(paths, status, observer):
         cont_sum_image = imageio.v2.imread(cont_deformed_root )
         cont_sum_image = cont_sum_image.astype(np.uint32) 
     i = 1
-    tag_value = ''
+    tag = ''
     acquisition_dates = []
     for p in paths:
         print('Stack #'+str(i))
-
-        # Check for tag_ file and set tag accordingly
-        if not tag_value:
-            tag_files = [f for f in os.listdir(os.path.dirname(p)) if f.startswith('tag_')]
-            if tag_files:
-                tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_' 
-
         dirname = os.path.dirname(p)
+        # Check for tag_ file and set tag accordingly
+        if not tag:
+            tag = get_scan_tag(dirname)
         
         date_str = dirname.split('/')[-1].split('-')[-2].replace('sunscan_', '') 
         time_str = dirname.split('/')[-1].split('-')[-1] 
@@ -266,7 +263,9 @@ def stack(paths, status, observer):
     if not os.path.exists(work_dir):
         os.mkdir(work_dir)
 
-    watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime+' '+tag_value
+    watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime
+    if tag:
+        watermark_txt += ' - '+ tag
 
     write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt, observer)
     if status['cont']: 

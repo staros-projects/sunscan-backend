@@ -72,7 +72,8 @@ class Scan(ScanBase):
     pro_sharpen_level: int
     cont_sharpen_level: int
     offset: int
-    observer: str
+    observer: str = ''
+    description: str = ''
 
 class CameraControls(BaseModel):
     exp: float
@@ -627,7 +628,7 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
         print(f"The directory {scan.filename} does not exist.")
 
 @app.post("/sunscan/scans/delete/", response_class=JSONResponse)
-async def deleteScans(data: AnimationRequest):
+async def deleteScans(data: PostProcessRequest):
     """
     Delete multiple scan directories.
     
@@ -707,7 +708,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
 
 
 @app.post("/sunscan/process/stack/")
-def process_stack(request: AnimationRequest):
+def process_stack(request: PostProcessRequest):
     required_files = {"clahe": False, "protus": False, "cont": False}
     for required_file, status in required_files.items():
         matching_paths = []
@@ -720,7 +721,7 @@ def process_stack(request: AnimationRequest):
     stack(request.paths, required_files, request.observer)
      
 @app.post("/sunscan/process/animate/")
-def process_animate(request: AnimationRequest):
+def process_animate(request: PostProcessRequest):
     # Supported filenames and output GIF names
     required_files = ["sunscan_clahe.png", "sunscan_protus.png", "sunscan_cont.png"]
     gif_names = {
@@ -748,14 +749,12 @@ def process_animate(request: AnimationRequest):
             path = Path(os.path.dirname(path_str)) / required_file
             print(path)
 
-            if path.exists():
+            if path.exists() or os.path.exists(path):
                 matching_paths.append(path)
 
+        print(matching_paths)
         # Create GIF if all paths contain the required file
         if len(matching_paths) == len(request.paths):
-
-           
-
             output_gif_path = os.path.join(work_dir, gif_names[required_file])
             create_gif(matching_paths, request.watermark, request.observer, output_gif_path, request.frame_duration, request.display_datetime, request.resize_gif, request.bidirectional, request.add_average_frame)
             gifs_created.append(str(output_gif_path))

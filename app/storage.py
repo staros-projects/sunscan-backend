@@ -5,6 +5,7 @@ import re
 import json
 from pathlib import Path
 from typing import Callable
+from config import LineDict
 
 def get_directory_size(path='storage'):
     """
@@ -72,7 +73,14 @@ def get_single_scan(path):
     print(base)
     return get_scans(base, True)[0]
 
-
+def get_scan_tag(path):
+    tag = ''
+    tag_files = [f for f in os.listdir(path) if f.startswith('tag_')]
+    if tag_files:
+        tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_' 
+        if tag_value in LineDict:
+            tag = LineDict[tag_value]
+    return tag
 
 def get_stacked_scans(path='storage/stacking/', withDetails=False):
     scans = []
