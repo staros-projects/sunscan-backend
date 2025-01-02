@@ -80,11 +80,6 @@ class CameraControls(BaseModel):
     gain: float
     max_visu_threshold: int
 
-# Logging configuration (currently commented out)
-# now = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-# logfile = f'logs/{now}.log'
-# logging.basicConfig(filename=logfile, filemode='w', level=logging.DEBUG)
-
 def sys_debug():
     """
     Log detailed system information for debugging purposes.
@@ -130,7 +125,7 @@ app.normalize = False
 # Determine the current camera model from system configuration
 current_dt_overlay=os.popen('grep dtoverlay=imx /boot/firmware/config.txt').read()
 print((current_dt_overlay))
-current_camera = "imx219" if "imx219" in current_dt_overlay else "imx477"
+current_camera = "imx477"
 
 # Initialize power management helper
 power = factory_power_helper()
@@ -273,7 +268,8 @@ async def connect(request: Request):
     Returns:
         JSONResponse: A JSON object indicating the camera's connection status.
     """
-    app.cameraController = CameraController(IMX477Camera_CSI())
+    camera = factory_imx477_camera_csi()
+    app.cameraController = CameraController(camera)
     if app.cameraController.getStatus() != "connected":
         app.cameraController.start()
     return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
