@@ -112,9 +112,9 @@ class IMX477Camera_CSI():
         depth_conv = 4   
 
         if not isRecording:
-            b = getMaxAduValue(array[:, 0::2][::2])-(offset/depth_conv/4)
-            g = getMaxAduValue(array[:, 0::2][1::2])-(offset/depth_conv/4)
-            r = getMaxAduValue(array[:, 1::2][1::2])-(offset/depth_conv/4)
+            b = getMaxAduValue(array[:, 0::2][::2])
+            g = getMaxAduValue(array[:, 0::2][1::2])
+            r = getMaxAduValue(array[:, 1::2][1::2])
             self._max_adu = (r,g,b)
         
         if self._monobin:

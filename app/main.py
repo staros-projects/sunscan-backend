@@ -833,11 +833,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 if len(frame):
                     r = frame / 256
                     if not app.cameraController.isRecording():
-                        # Resize image for streaming
-                        scale_percent = 90 if app.cameraController.isInColorMode() else 70
-                        width = int(frame.shape[1] * scale_percent / 100)
-                        height = int(frame.shape[0] * scale_percent / 100)
-     
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
                             d = time.strftime("%Y_%m_%d")
@@ -852,10 +847,16 @@ async def websocket_endpoint(websocket: WebSocket):
                             app.snapShotCount += 1
                             app.takeSnapShot = False
                             app.snapshot_header = None
+
+                        # Resize image for streaming
+                        scale_percent = 90 if app.cameraController.isInColorMode() else 70
+                        width = int(frame.shape[1] * scale_percent / 100)
+                        height = int(frame.shape[0] * scale_percent / 100)
+                        r = cv2.resize(r, (width, height))
                     
                         # Get and send ADU values
                         max_adu = app.cameraController.getMaxADU()
-                        r = cv2.resize(r, (width, height))
+                        print(max_adu)
                         await websocket.send_text('adu;#;'+str(max_adu[0])+';#;'+str(max_adu[1])+';#;'+str(max_adu[2])) 
 
                         # Send intensity and spectrum data for cropped images
