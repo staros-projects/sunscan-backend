@@ -852,7 +852,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                         # Get and send ADU values
                         max_adu = app.cameraController.getMaxADU()
-                        print(max_adu)
                         await websocket.send_text('adu;#;'+str(max_adu[0])+';#;'+str(max_adu[1])+';#;'+str(max_adu[2])) 
 
                         # Send intensity and spectrum data for cropped images

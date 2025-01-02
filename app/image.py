@@ -142,10 +142,8 @@ def factory_image_raw(array: np.ndarray) -> AbstractImageRaw12BitColor:
         AbstractImageRaw12BitColor: ImageRaw object.
     """
     if Picamera2.platform == Platform.PISP:
-        print("Create ImageRaw object for Raspberry Pi 5 and later")
         return ImageRawRpi5(array)
     else:
-        print("Create ImageRaw object for Raspberry Pi 4")
         return ImageRawRpi4(array)
     
 

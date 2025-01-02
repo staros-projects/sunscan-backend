@@ -124,7 +124,7 @@ class BaseIMX477Camera_CSI(ABC):
     def process_monobin_mode(self, image: AbstractImageRaw12BitColor, bin, monobin_mode):
         match monobin_mode:  # for each case: values are already in 16 bit
             case 0:  # rgb monobin
-                array_16bit = image.convert_to_grayscale()
+                array_16bit = image.bin_2x2()
             case 1:  # red layer
                 array_16bit = image.channel_red()
             case 2:  # green layer
