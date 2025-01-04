@@ -5,8 +5,9 @@ from pathlib import Path
 from libcamera import controls
 from picamera2 import Picamera2, Controls
 from picamera2.platform import Platform
-
+from numba import jit
 from abc import ABC
+from abc import abstractmethod
 from image import AbstractImageRaw12BitColor, factory_image_raw
 
 def getMaxAduValue(array):
@@ -245,10 +246,22 @@ class IMX477Camera_CSI_rpi4(BaseIMX477Camera_CSI):
 
 class IMX477Camera_CSI_rpi5(BaseIMX477Camera_CSI):
     def __init__(self):
-        super().__init__(16)
-        self.depth = 16
+        """
+        Initializes the camera with specific settings.
+        Attributes:
+            depth (int): The bit depth of the camera.
+            offset (int): The offset value for the camera.
+            tuning_file_name (str): The name of the tuning file for the camera.
+            black_level_camera (int): An offset of 250 ADU applied by the manufacturer, 
+                                      which needs to be subtracted. We want to leave 80 ADU.
+        """
+        super().__init__(12)
         self.offset = 800
         self.tuning_file_name = "imx477_scientific_pisp.json"
+        inti_black_level = 80
+        # The black level is 256 ADU, we want to leave 80 ADU
+        # see more about camera black level https://www.strollswithmydog.com/pi-hq-cam-sensor-performance/
+        self.black_level_camera = 256 - inti_black_level
     def capture_raw_image(self):
         """
         Capture a raw image from the camera and extract the 12 most significant bits.
@@ -259,8 +272,10 @@ class IMX477Camera_CSI_rpi5(BaseIMX477Camera_CSI):
         raw_array = self._picam2.capture_array('raw').view(np.uint16)
 
         # Extract the 12 most significant bits
-        raw_array_12bit = (raw_array >> 4).astype(np.uint16)
-        return raw_array_12bit
+        raw_array_12bit = raw_array >> 4
+        # Apply the offset see https://www.strollswithmydog.com/pi-hq-cam-sensor-performance/
+        raw_array_12bit = raw_array_12bit - self.black_level_camera
+        return raw_array_12bit.astype(np.uint16)
 
 
 
@@ -277,6 +292,3 @@ def factory_imx477_camera_csi() -> BaseIMX477Camera_CSI:
     else:
         print("Create Camera object for Raspberry Pi 4")
         return IMX477Camera_CSI_rpi4()
-
-
-
