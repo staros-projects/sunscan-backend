@@ -8,7 +8,7 @@ from picamera2.platform import Platform
 from numba import jit
 from abc import ABC
 from abc import abstractmethod
-from image import AbstractImageRaw12BitColor, factory_image_raw
+from image import AbstractImageRaw12BitColor, ImageRawCameraHQ
 
 def getMaxAduValue(array):
     """
@@ -29,7 +29,7 @@ class BaseIMX477Camera_CSI(ABC):
             cls.instance = super(BaseIMX477Camera_CSI, cls).__new__(cls)
         return cls.instance
 
-    def __init__(self, depth):
+    def __init__(self):
         """
         Initialize the IMX477 camera with default settings.
 
@@ -53,8 +53,13 @@ class BaseIMX477Camera_CSI(ABC):
         self._crop_height = 220
         self._max_adu = (0,0,0)
         self._monobin_mode = 0
-        self.data_depth = depth
-        self.tuning_file_name = "imx477_scientific.json"
+
+        # pisp is used on Raspberry Pi 5 and later
+        self.tuning_file_name = "imx477_scientific_pisp.json" if Picamera2.platform == Platform.PISP else "imx477_scientific.json"
+
+        # The black level is 256 ADU, we want to leave 80 ADU
+        # see more about camera black level https://www.strollswithmydog.com/pi-hq-cam-sensor-performance/
+        self.black_level_camera = 256
 
     def init(self):
         """
@@ -65,11 +70,9 @@ class BaseIMX477Camera_CSI(ABC):
         """
         # load the default tuning file
         directory = Path(__file__).parent.absolute()
-        # pisp is used on Raspberry Pi 5 and later
-        is_pisp = Picamera2.platform == Platform.PISP
-        tuning_file = "imx477_scientific_pisp.json" if is_pisp else "imx477_scientific.json"
-        print(f"Load tuning_file: {tuning_file} in {directory}")
-        tuning = Picamera2.load_tuning_file(tuning_file, directory)
+        
+        print(f"Load tuning_file: { self.tuning_file_name} in {directory}")
+        tuning = Picamera2.load_tuning_file( self.tuning_file_name, directory)
         contrast_algo = Picamera2.find_tuning_algo(tuning, "rpi.contrast")
         gamma_curve = contrast_algo["gamma_curve"]
         contrast_algo["ce_enable"] = 0
@@ -122,25 +125,24 @@ class BaseIMX477Camera_CSI(ABC):
         """
         return True
 
-    def process_monobin_mode(self, image: AbstractImageRaw12BitColor, bin, monobin_mode):
-        match monobin_mode:  # for each case: values are already in 16 bit
+    def process_monobin_mode(self, image: AbstractImageRaw12BitColor, monobin_mode):
+        match monobin_mode: 
             case 0:  # rgb monobin
-                array_16bit = image.bin_2x2()
+                array = (image.bin_2x2() - (self.black_level_camera * 4)) 
             case 1:  # red layer
-                array_16bit = image.channel_red()
+                array = (image.channel_red() - self.black_level_camera)
             case 2:  # green layer
-                array_16bit = image.channel_green()
+                array = (image.channel_green() - self.black_level_camera)
             case 3:  # blue layer
-                array_16bit = image.channel_blue()
-        return array_16bit
+                array = (image.channel_blue() - self.black_level_camera)
+        return array * 4 # 16 bits conversion
 
-    def capture(self, isRecording, withFlat=False):
+    def capture(self, isRecording):
         """
         Capture an image from the camera.
 
         Args:
             isRecording (bool): Whether the camera is currently recording.
-            withFlat (bool, optional): Whether to apply flat field correction. Defaults to False.
 
         Returns:
             numpy.ndarray: Captured image as a 12-bit numpy array.
@@ -150,7 +152,7 @@ class BaseIMX477Camera_CSI(ABC):
         
         array = self.capture_raw_image()
         
-        image = factory_image_raw(array)
+        image = ImageRawCameraHQ(array)
 
         # Crop the image        
         if self._crop:
@@ -163,7 +165,7 @@ class BaseIMX477Camera_CSI(ABC):
 
         if self._monobin:
             # mono image output
-            array_16bit = self.process_monobin_mode(image, bin=2, monobin_mode=self._monobin_mode)
+            array_16bit = self.process_monobin_mode(image, monobin_mode=self._monobin_mode)
             array_16bit[array_16bit>65535]=65535  # clip values to 16-bit
             frame = np.uint16(array_16bit)  # cast to uint16
 
@@ -229,13 +231,11 @@ class BaseIMX477Camera_CSI(ABC):
 
 class IMX477Camera_CSI_rpi4(BaseIMX477Camera_CSI):
     def __init__(self):
-        super().__init__(12)
-        self.depth = 12
-        self.offset = 3200  # 800 ADU par channel in 12-bit, computed to reduce the black level to 70 to 80 ADU. Need by some version of INTI
-        self.tuning_file_name = "imx477_scientific.json"
+        super().__init__()
+
     def capture_raw_image(self):
         """
-        Capture a raw image from the camera and extract the 12 most significant bits.
+        Capture a raw image from the camera.
 
         Returns:
             numpy.ndarray: Captured raw image as a 12-bit numpy array.
@@ -246,22 +246,8 @@ class IMX477Camera_CSI_rpi4(BaseIMX477Camera_CSI):
 
 class IMX477Camera_CSI_rpi5(BaseIMX477Camera_CSI):
     def __init__(self):
-        """
-        Initializes the camera with specific settings.
-        Attributes:
-            depth (int): The bit depth of the camera.
-            offset (int): The offset value for the camera.
-            tuning_file_name (str): The name of the tuning file for the camera.
-            black_level_camera (int): An offset of 250 ADU applied by the manufacturer, 
-                                      which needs to be subtracted. We want to leave 80 ADU.
-        """
-        super().__init__(12)
-        self.offset = 800
-        self.tuning_file_name = "imx477_scientific_pisp.json"
-        inti_black_level = 80
-        # The black level is 256 ADU, we want to leave 80 ADU
-        # see more about camera black level https://www.strollswithmydog.com/pi-hq-cam-sensor-performance/
-        self.black_level_camera = 256 - inti_black_level
+        super().__init__()
+
     def capture_raw_image(self):
         """
         Capture a raw image from the camera and extract the 12 most significant bits.
@@ -273,8 +259,7 @@ class IMX477Camera_CSI_rpi5(BaseIMX477Camera_CSI):
 
         # Extract the 12 most significant bits
         raw_array_12bit = raw_array >> 4
-        # Apply the offset see https://www.strollswithmydog.com/pi-hq-cam-sensor-performance/
-        raw_array_12bit = raw_array_12bit - self.black_level_camera
+
         return raw_array_12bit.astype(np.uint16)
 
 

@@ -33,7 +33,7 @@ class AbstractImageRaw12BitColor(ABC):
         Returns:
             numpy.ndarray: Converted grayscale image.
         """
-        return bin2dBayer(np.array(self.array),2).astype(np.uint16)
+        return bin2dBayer(np.array(self.array),2)
 
     def to_rgb_16bit(self):
         """
@@ -73,7 +73,7 @@ class AbstractImageRaw12BitColor(ABC):
         return self.__class__(self.array[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width])
     
 
-class ImageRawRpi4(AbstractImageRaw12BitColor):
+class ImageRawCameraHQ(AbstractImageRaw12BitColor):
     def __init__(self, array: np.ndarray):
         super().__init__(array)
     def extract_red_channel(self) -> np.ndarray:
@@ -101,51 +101,6 @@ class ImageRawRpi4(AbstractImageRaw12BitColor):
             numpy.ndarray: Extracted blue channel.
         """
         return self.array[0::2, 0::2]
-
-class ImageRawRpi5(AbstractImageRaw12BitColor):
-    def __init__(self, array: np.ndarray):
-        super().__init__(array)
-    def extract_red_channel(self) -> np.ndarray:
-        """
-        Extract the red channel from the Bayer pattern array.
-
-        Returns:
-            numpy.ndarray: Extracted red channel.
-        """
-        return self.array[1::2, 1::2]
-    def extract_green_channel(self) -> np.ndarray:
-        """
-        Extract the green channel from the Bayer pattern array.
-
-        Returns:
-            numpy.ndarray: Extracted green channel.
-        """
-        return self.array[0::2, 1::2] + self.array[1::2, 0::2]
-
-    def extract_blue_channel(self) -> np.ndarray:
-        """
-        Extract the blue channel from the Bayer pattern array.
-
-        Returns:
-            numpy.ndarray: Extracted blue channel.
-        """
-        return self.array[0::2, 0::2]
-
-def factory_image_raw(array: np.ndarray) -> AbstractImageRaw12BitColor:
-    """
-    Factory function to create an ImageRaw object based on the platform.
-
-    Args:
-        array (numpy.ndarray): Input Bayer pattern array.
-
-    Returns:
-        AbstractImageRaw12BitColor: ImageRaw object.
-    """
-    if Picamera2.platform == Platform.PISP:
-        return ImageRawRpi5(array)
-    else:
-        return ImageRawRpi4(array)
-    
 
 @jit(nopython=True)
 def bin2dBayer(a, K):
