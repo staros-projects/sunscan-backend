@@ -91,7 +91,7 @@ class ImageRawRpi4(AbstractImageRaw12BitColor):
         Returns:
             numpy.ndarray: Extracted green channel.
         """
-        return (self.array[0::2, 1::2] + self.array[1::2, 0::2]) / 2
+        return self.array[0::2, 1::2] + self.array[1::2, 0::2]
 
     def extract_blue_channel(self) -> np.ndarray:
         """
@@ -112,7 +112,7 @@ class ImageRawRpi5(AbstractImageRaw12BitColor):
         Returns:
             numpy.ndarray: Extracted red channel.
         """
-        return self.array[0::2, 0::2]
+        return self.array[1::2, 1::2]
     def extract_green_channel(self) -> np.ndarray:
         """
         Extract the green channel from the Bayer pattern array.
@@ -120,7 +120,7 @@ class ImageRawRpi5(AbstractImageRaw12BitColor):
         Returns:
             numpy.ndarray: Extracted green channel.
         """
-        return (self.array[0::2, 1::2] + self.array[1::2, 0::2]) / 2
+        return self.array[0::2, 1::2] + self.array[1::2, 0::2]
 
     def extract_blue_channel(self) -> np.ndarray:
         """
@@ -129,7 +129,7 @@ class ImageRawRpi5(AbstractImageRaw12BitColor):
         Returns:
             numpy.ndarray: Extracted blue channel.
         """
-        return self.array[1::2, 1::2]
+        return self.array[0::2, 0::2]
 
 def factory_image_raw(array: np.ndarray) -> AbstractImageRaw12BitColor:
     """
