@@ -865,13 +865,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         max_threshold = app.cameraController.getMaxVisuThreshold()
                         r = (r * 256) / max_threshold
-        
-
                     
                     # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()
                     file_64encoded = str(base64.b64encode(byte_im)  ).split('b\'')
                     bytes_to_sent = (file_64encoded[1])[:-1]
+
                     await websocket.send_text('camera;#;0;#;0;#;data:image/jpg;base64,'+bytes_to_sent )
                    
             # Adjust sleep time based on recording status

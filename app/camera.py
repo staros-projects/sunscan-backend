@@ -57,9 +57,9 @@ class BaseIMX477Camera_CSI(ABC):
         # pisp is used on Raspberry Pi 5 and later
         self.tuning_file_name = "imx477_scientific_pisp.json" if Picamera2.platform == Platform.PISP else "imx477_scientific.json"
 
-        # The black level is 256 ADU, we want to leave 80 ADU
+        # The black level is 256 ADU (here we have voluntarily set the value to 200)
         # see more about camera black level https://www.strollswithmydog.com/pi-hq-cam-sensor-performance/
-        self.black_level_camera = 256
+        self.black_level_camera = 200
 
     def init(self):
         """

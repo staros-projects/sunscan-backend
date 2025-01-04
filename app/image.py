@@ -53,7 +53,7 @@ class AbstractImageRaw12BitColor(ABC):
             tuple[int, int, int]: Maximum ADU values (red, green, blue).
         """
         red_max = np.max(self.channel_red())
-        green_max = np.max(self.channel_green())
+        green_max = np.max(self.channel_green()/2)
         blue_max = np.max(self.channel_blue())
         return (red_max, green_max, blue_max)
 
