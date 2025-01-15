@@ -11,22 +11,21 @@ def factory_power_helper():
 
 
 def is_battery_system_available():
+    """
+    Checks if the battery system is available by sending a command to the PiSugar device.
+
+    Returns:
+        bool: True if the battery system is available, False otherwise.
+    """
     try:
-        # Vérifier si le port est ouvert
-        with socket.create_connection(("127.0.0.1", 8423), timeout=1) as sock:
-            # Tester la commande `get battery`
-            ps = subprocess.Popen(('echo', 'get battery'), stdout=subprocess.PIPE)
-            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
-            ps.wait()
-            result_str = result.decode('utf-8').rstrip()
-            # Si une réponse valide est reçue, le système est disponible
-            return "battery" in result_str.lower()
-    except (socket.error, subprocess.CalledProcessError, ValueError):
-        # Si une exception est levée, le système n'est pas disponible
+        response = PowerHelper().send_command_to_pisugar("get battery")
+        return "battery" in response.lower()
+    except PiSugarError:
         return False
 
 
 class MockPowerHelper:
+    """MockPowerHelper is a mock class that simulates power-related functionalities."""
     def get_battery(self):
         return 42.0
     def battery_power_plugged(self):
@@ -36,23 +35,44 @@ class MockPowerHelper:
     def sync_time(self):
         pass
 
+class PiSugarError(Exception):
+    """Custom exception for PiSugar related errors."""
+    def __init__(self, message):
+        super().__init__(message)
 
 class PowerHelper:
     """A helper class for managing power-related functions."""
 
+    @classmethod
+    def send_command_to_pisugar(cls, command: str) -> str:
+        """
+        Sends a command to the PiSugar power management system via a socket connection.
+        
+        Args:
+            command (str): The command to be sent to the PiSugar system.
+        
+        Returns:
+            str: The response from the PiSugar system if the command is successfully sent and a response is received.
+        
+        Raises:
+            PiSugarError: If there is an error creating or using the socket connection.
+        """
+        try:
+            with socket.create_connection(("127.0.0.1", 8423), timeout=1) as sock:
+                # Send the command directly via the socket
+                sock.sendall(f"{command}\n".encode('utf-8'))
+                response = sock.recv(1024).decode('utf-8').strip()
+                return response
+        except socket.error as e:
+            # If an exception is raised, the system is not available
+            raise PiSugarError(f"Failed to send command to PiSugar: {e}") from e
+            
     def __init__(self):
         """Initialize the PowerHelper class with a logger."""
         self.logger = logging.getLogger('maginkcal')
 
-        try:
-            # Set battery input protection 
-            ps = subprocess.Popen(('echo', 'set_battery_input_protect true'), stdout=subprocess.PIPE)
-            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
-            ps.wait()
-            
-        except Exception as e:
-            self.logger.info('Invalid battery')
-
+        # Set battery input protection 
+        self.send_command_to_pisugar("set_battery_input_protect true")
 
     def get_battery(self):
         """
@@ -65,16 +85,10 @@ class PowerHelper:
         # command = ['echo "get battery" | nc -q 0 127.0.0.1 8423']
         battery_float = -1
         try:
-            ps = subprocess.Popen(('echo', 'get battery'), stdout=subprocess.PIPE)
-            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
-            ps.wait()
-            result_str = result.decode('utf-8').rstrip()
-            battery_level = result_str.split()[-1]
+            response = self.send_command_to_pisugar("get battery")
+            battery_level = response.split()[-1]
             battery_float = float(battery_level)
-            
-
-
-        except (ValueError, subprocess.CalledProcessError) as e:
+        except ValueError:
             self.logger.info('Invalid battery output')
         return battery_float
 
@@ -88,16 +102,11 @@ class PowerHelper:
         # command = ['echo "get battery_power_plugged" | nc -q 0 127.0.0.1 8423']
         battery_power_plugged = False
         try:
-            ps = subprocess.Popen(('echo', 'get battery_power_plugged'), stdout=subprocess.PIPE)
-            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
-            ps.wait()
-            result_str = result.decode('utf-8').rstrip()
-            
-            battery_res = result_str.split(': ')[-1]
-
-            battery_power_plugged = True if battery_res == 'true' else False
-        except (ValueError, subprocess.CalledProcessError) as e:
+            response = self.send_command_to_pisugar("get battery_power_plugged")
+            battery_power_plugged = response.split(': ')[-1].strip().lower() == 'true'
+        except (ValueError, PiSugarError) as e:
             self.logger.info('Invalid battery output')
+            self.logger.error(e)
         return battery_power_plugged
 
     def sync_time(self):
@@ -109,8 +118,8 @@ class PowerHelper:
         """
         # To sync PiSugar RTC with current time
         try:
-            ps = subprocess.Popen(('echo', 'rtc_rtc2pi'), stdout=subprocess.PIPE)
-            result = subprocess.check_output(('nc', '-q', '0', '127.0.0.1', '8423'), stdin=ps.stdout)
-            ps.wait()
-        except subprocess.CalledProcessError:
-            self.logger.info('Invalid time sync command')
+            response = self.send_command_to_pisugar("rtc_rtc2pi")
+            if "done" not in response.lower():
+                self.logger.info('Invalid time sync command')
+        except PiSugarError as e:
+            self.logger.error(f"Failed to sync time with PiSugar: {e}")
