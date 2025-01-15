@@ -2,9 +2,12 @@ curl
 ffmpeg
 gcc
 git
+i2c-tools
+jq
 libatlas-base-dev
 libcamera-dev
 libcap-dev
+libi2c-dev
 netcat-traditional
 nginx
 python3
