@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - name: Determine version
@@ -34,8 +34,8 @@ jobs:
           mkdir -p pi-gen-sunscan/01-prepare-repo
           cat > pi-gen-sunscan/01-prepare-repo/00-run.sh <<-EOF
           #!/bin/bash
-          git clone ${{ github.server_url }}/${{ github.repository }}.git --branch ${{ github.head_ref }} --depth 1 \${WORK_DIR}/tmp/repo
-          
+          git clone ${{ github.server_url }}/${{ github.event.pull_request.head.repo.full_name || github.repository }}.git --branch ${{ github.head_ref || github.ref_name }} --depth 1 ${WORK_DIR}/tmp/repo
+          ls -alh ${WORK_DIR}/tmp/repo
           EOF
           } &&
           chmod +x pi-gen-sunscan/01-prepare-repo/00-run.sh
