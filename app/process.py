@@ -482,9 +482,9 @@ def Colorise_Image(frame_contrasted, wd, header, observer):
         # Apply gamma correction
         im = im = adjust_gamma(f_8,1.2)
         im = im.astype(np.float32) / 256
-        # Create RGB channels with different gamma values
-        rgb = (np.power(im, 3.87), np.power(im, 1.35), np.power(im, 0.6))
-        im = cv2.merge(rgb)
+        # Create BGR channels with different gamma values
+        bgr = (np.power(im, 3.87), np.power(im, 1.35), np.power(im, 0.6))
+        im = cv2.merge(rbgrgb)
         im = (im * 256).astype(np.uint16)
 
         # Apply thresholds to H-alpha image
@@ -499,9 +499,25 @@ def Colorise_Image(frame_contrasted, wd, header, observer):
         # Apply gamma correction
         im = adjust_gamma(f_8,1.8)
         im = im.astype(np.float32) / 256
-        # Create RGB channels with different gamma values
-        rgb = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
-        im = cv2.merge(rgb)
+        # Create BGR channels with different gamma values
+        bgr = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
+        im = cv2.merge(bgr)
+        im = (im * 256).astype(np.uint8)
+
+        # Apply thresholds to image
+        Seuil_bas=np.percentile(im,50)
+        Seuil_haut=np.percentile(im,99.99999)*1.1
+        cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
+        cc[cc<0]=0
+        img_color=cc
+        
+    elif  'hbeta' in color:
+        # Apply gamma correction
+        im = adjust_gamma(f_8,1.8)
+        im = im.astype(np.float32) / 256
+        # Create BGR channels with different gamma values
+        bgr = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
+        im = cv2.merge(bgr)
         im = (im * 256).astype(np.uint8)
 
         # Apply thresholds to image
@@ -511,24 +527,33 @@ def Colorise_Image(frame_contrasted, wd, header, observer):
         cc[cc<0]=0
         img_color=cc
 
-            
+    elif  'mgI' in color:
+        # Apply gamma correction
+        im = adjust_gamma(f_8,1.2)
+        im = im.astype(np.float32) / 256
+        # Create BGR channels with different gamma values
+        bgr = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
+        im = cv2.merge(bgr)
+        im = (im * 256).astype(np.uint8)
+
+        # Apply thresholds to image
+        Seuil_bas=np.percentile(im,50)
+        Seuil_haut=np.percentile(im,99.99999)*1.1
+        cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
+        cc[cc<0]=0
+        img_color=cc
+
     elif color == 'heI' :
         # Apply gamma correction
         im = adjust_gamma(f_8,1.8)
         im = im.astype(np.float32) / 256
-        # Create RGB channels with different gamma values
-        rgb = (np.power(im, 0.2), np.power(im, 1.5), np.power(im, 1.5))
-        im = cv2.merge(rgb)
-        im = (im * 256).astype(np.uint8)
+        # Create BGR channels with different gamma values
+        bgr = (np.power(im, 0.0), np.power(im, 2.8), np.power(im,2.2))
+        im = cv2.merge(bgr)
+        img_color = (im * 256).astype(np.uint8)
 
-        # Apply thresholds to image
-        Seuil_bas=np.percentile(im,50)
-        Seuil_haut=np.percentile(im,99.99999)*1.1
-        cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
-        cc[cc<0]=0
-        img_color=cc
 
-    cv2.imwrite(os.path.join(wd,'sunscan_'+color+'.jpg'),apply_watermark_if_enable(img_color, header, observer))
+    cv2.imwrite(os.path.join(wd,'sunscan_'+color+'_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)

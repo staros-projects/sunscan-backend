@@ -212,7 +212,7 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Im
     result_image = result_image.astype(np.uint16)
 
     res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
-    Colorise_Image(cc, WorkDir, header, observer)
+    Colorise_Image(res, WorkDir, header, observer)
     
     coef = 0.6
     result_image = image1 + coef * image2_transformed
