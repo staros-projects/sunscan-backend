@@ -83,6 +83,11 @@ def get_scan_tag(path):
     return tag
 
 def get_stacked_scans(path='storage/stacking/', withDetails=False):
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(path):
+        os.mkdir(path)
+        
     scans = []
     regex = r"stacked_(clahe|cont|protus)_(\d)_(raw|sharpen).png"
     for root, dirs, files in os.walk(path, topdown=False):
@@ -110,6 +115,11 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
     return scans  
 
 def get_animated_scans(path='storage/animations/', withDetails=False):
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(path):
+        os.mkdir(path)
+
     scans = []
 
     for root, dirs, files in os.walk(path, topdown=False):
@@ -136,6 +146,11 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
     return scans  
 
 def get_scans(path='storage/scans/', withDetails=False):
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(path):
+        os.mkdir(path)
+        
     scans = []
     images_type = {'clahe':'Clahe + Unsharp mask',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',

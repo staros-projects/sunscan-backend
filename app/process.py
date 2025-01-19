@@ -562,4 +562,4 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("/var/www/sunscan-backend/app/storage/scans/2024_11_22/sunscan_2024_11_22-12_59_03/scan.ser", mock_callback, False, True, 1100)
+    process_scan("C:\\Users\\g-ber\\Downloads\\helium.ser", mock_callback, False, True, 1100, False, advanced='helium')
