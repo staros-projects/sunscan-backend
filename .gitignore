@@ -117,7 +117,7 @@ dmypy.json
 # project adds
 *.log
 /app/.idea
-
+/app/jsolex
 /app/storage/raw/*
 /app/storage/scans/*
 /app/storage/snapshots/*

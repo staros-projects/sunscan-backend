@@ -7,8 +7,9 @@ from astropy.io import fits
 from Inti_recon import solex_proc 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
+from helium import process_helium
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer=''):
+def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced=''):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -39,6 +40,15 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     subrep=os.path.join(WorkDir,'Complements')
     if not os.path.isdir(subrep):
         os.makedirs(subrep)
+
+    #Les param�tres sont les suivants, que je sugg�re d�adopter : d�calage par rapport � la raie Fe I = +74 pixiels
+    #Decalages pour le continuum par rapport � la raie He I : -11 pixels et +6 pixels.
+    helium = True if advanced == 'helium' else False
+    if helium:
+        offset = 74
+        noisereduction = True
+        contShift = 11
+        dopplerShift = -6
 
     Shift = [0, dopplerShift, contShift, offset, 0.0, 0.0]
     Flags =  {'DOPFLIP': False, 
@@ -73,15 +83,21 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
         
         header = update_header(WorkDir, header, observer)
-        # Create and save surface image
-        create_surface_image(WorkDir, frames, surfaceSharpLevel, header, observer)
-        # Create and save continuum image
-        create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
-        # Create and save prominence (protus) image
-        create_protus_image(WorkDir, frames, cercle, proSharpLevel, header, observer)
-        # If doppler contrast is enabled, create and save doppler image
-        if dopcont:
-            create_doppler_image(WorkDir, frames, header, observer)
+
+        if helium:
+            result_image = process_helium(WorkDir, frames, header, observer, apply_watermark_if_enable)
+
+ 
+        else:
+            # Create and save surface image
+            create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer)
+            # Create and save continuum image
+            create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
+            # Create and save prominence (protus) image
+            create_protus_image(WorkDir, frames, cercle, proSharpLevel, header, observer)
+            # If doppler contrast is enabled, create and save doppler image
+            if dopcont:
+                create_doppler_image(WorkDir, frames, header, observer)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -129,7 +145,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, level, header, observer):
+def create_surface_image(wd, frames, helium, level, header, observer):
     """
     Create and save various surface images of the sun.
 
@@ -471,12 +487,14 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd, header, observer):
     hist[0:int(th_otsu)]=0
     pos_max=np.argmax(hist)
 
+    print('autodetect region hist: ', pos_max)
     if couleur =='on' :  
         if pos_max<200 and pos_max>=70 :
             couleur="H-alpha"
         if pos_max<70 :
             couleur="Calcium"
     
+    img_color = None
     if couleur != '' :
         # image couleur en h-alpha
         if couleur == 'H-alpha' :
@@ -512,8 +530,8 @@ def Colorise_Image (couleur_lbl, frame_contrasted, wd, header, observer):
             cc[cc<0]=0
             img_color=cc
 
-        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),apply_watermark_if_enable(img_color, header, observer))
-        return img_color
+        if couleur != 'on':
+            cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),apply_watermark_if_enable(img_color, header, observer))
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)

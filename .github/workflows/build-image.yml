@@ -1,7 +1,6 @@
 name: Builds the Sunscan OS image
 
 on:
-  pull_request:
   push:
     tags:
       - '*.*.*'
