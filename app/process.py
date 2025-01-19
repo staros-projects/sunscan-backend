@@ -85,7 +85,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         header = update_header(WorkDir, header, observer)
 
         if helium:
-            result_image = process_helium(WorkDir, frames, header, observer, apply_watermark_if_enable)
+            result_image = process_helium(WorkDir, frames, header, observer, apply_watermark_if_enable, Colorise_Image)
 
  
         else:
@@ -209,10 +209,11 @@ def create_surface_image(wd, frames, helium, level, header, observer):
         print(os.path.join(wd, 'sunscan_preview.jpg'))
     except Exception as e:
         print(e)
-    Colorise_Image('auto', cc, wd, header, observer)
 
-def apply_watermark_if_enable(frame, header, observer):
-    print('watermark', observer)
+    Colorise_Image(cc, wd, header, observer)
+
+def apply_watermark_if_enable(frame, header, observer, desc=''):
+    print('watermark', observer, desc)
     if not observer:
         return frame
     # Ensure the frame is in uint8 format
@@ -233,12 +234,13 @@ def apply_watermark_if_enable(frame, header, observer):
     draw = ImageDraw.Draw(image) 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 30)  # Use a specific font if available
     text_position = get_text_position(image)
-    draw.text(text_position, formatted_date, fill="white", font=font)
+    desc = ' - ' + desc if desc else ''
+    draw.text(text_position, formatted_date+desc, fill="white", font=font)
 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
-    draw.text(get_text_position(image, 126), 'SUNSCAN', fill="white", font=font)
-    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Thin.ttf", 30)  # Use a specific font if available
-    draw.text(get_text_position(image, 84), observer, fill="white", font=font)
+    draw.text(get_text_position(image, 115), 'SUNSCAN', fill="white", font=font)
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 20)  # Use a specific font if available
+    draw.text(get_text_position(image, 73), observer, fill="white", font=font)
     return np.array(image)
 
 def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
@@ -279,7 +281,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         cc = sharpenImage(cc, level)
 
         # save as png
-        cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer))
+        cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer, 'Continuum'))
         cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
@@ -462,76 +464,71 @@ def adjust_gamma(image, gamma=1.0):
 	# apply gamma correction using the lookup table
 	return cv2.LUT(image, table)
 
-def Colorise_Image (couleur_lbl, frame_contrasted, wd, header, observer):
-    # gestion couleur auto ou sur dropdown database compatibility
-    # 'Manual','Ha','Ha2cb','Cah','Cah1v','Cak','Cak1v','HeID3'
-    if couleur_lbl == 'auto' :
-        couleur = 'on' # mode detection auto basé sur histogramme simple
-    else :
-        if couleur_lbl[:2] == 'Ha' :
-            couleur='H-alpha'
-        if couleur_lbl[:3] == 'Ha2' :
-            couleur='Pale'
-        if couleur_lbl[:2] == 'Ca' :
-            couleur='Calcium'
-        if couleur_lbl[:2] == 'He' :
-            couleur='Pale'
-    
+def Colorise_Image(frame_contrasted, wd, header, observer):
+    color = None
+    tag_files = [f for f in os.listdir(wd) if f.startswith('tag_')]
+    if tag_files:
+        tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_'
+        color = tag_value
+    if not color:
+        return 
+
+    img_color = None
     f=frame_contrasted/256
     f_8=f.astype('uint8')
-    
-    #hist = cv2.calcHist([f_8],[0],None,[256],[10,256])
-    # separe les 2 pics fond et soleil
-    th_otsu,img_binarized=cv2.threshold(f_8, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    hist = cv2.calcHist([f_8],[0],None,[256],[0,256])
-    hist[0:int(th_otsu)]=0
-    pos_max=np.argmax(hist)
 
-    print('autodetect region hist: ', pos_max)
-    if couleur =='on' :  
-        if pos_max<200 and pos_max>=70 :
-            couleur="H-alpha"
-        if pos_max<70 :
-            couleur="Calcium"
-    
-    img_color = None
-    if couleur != '' :
-        # image couleur en h-alpha
-        if couleur == 'H-alpha' :
-            # Apply gamma correction
-            im = im = adjust_gamma(f_8,1.2)
-            im = im.astype(np.float32) / 256
-            # Create RGB channels with different gamma values
-            rgb = (np.power(im, 3.87), np.power(im, 1.35), np.power(im, 0.6))
-            im = cv2.merge(rgb)
-            im = (im * 256).astype(np.uint16)
+    # image couleur en h-alpha
+    if color == 'ha' :
+        # Apply gamma correction
+        im = im = adjust_gamma(f_8,1.2)
+        im = im.astype(np.float32) / 256
+        # Create RGB channels with different gamma values
+        rgb = (np.power(im, 3.87), np.power(im, 1.35), np.power(im, 0.6))
+        im = cv2.merge(rgb)
+        im = (im * 256).astype(np.uint16)
 
-            # Apply thresholds to H-alpha image
-            Seuil_bas=np.percentile(im,68)
-            Seuil_haut=np.percentile(im,99.9999)*1.05
-            cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
-            cc[cc<0]=0
-            img_color=cc
+        # Apply thresholds to H-alpha image
+        Seuil_bas=np.percentile(im,68)
+        Seuil_haut=np.percentile(im,99.9999)*1.05
+        cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
+        cc[cc<0]=0
+        img_color=cc
+        
+    # image couleur en calcium
+    elif  'caII' in color:
+        # Apply gamma correction
+        im = adjust_gamma(f_8,1.8)
+        im = im.astype(np.float32) / 256
+        # Create RGB channels with different gamma values
+        rgb = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
+        im = cv2.merge(rgb)
+        im = (im * 256).astype(np.uint8)
+
+        # Apply thresholds to image
+        Seuil_bas=np.percentile(im,50)
+        Seuil_haut=np.percentile(im,99.99999)*1.1
+        cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
+        cc[cc<0]=0
+        img_color=cc
+
             
-        # image couleur en calcium
-        if couleur == 'Calcium' :
-            # Apply gamma correction
-            im = adjust_gamma(f_8,1.8)
-            im = im.astype(np.float32) / 256
-            # Create RGB channels with different gamma values
-            rgb = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
-            im = cv2.merge(rgb)
-            im = (im * 256).astype(np.uint8)
+    elif color == 'heI' :
+        # Apply gamma correction
+        im = adjust_gamma(f_8,1.8)
+        im = im.astype(np.float32) / 256
+        # Create RGB channels with different gamma values
+        rgb = (np.power(im, 0.2), np.power(im, 1.5), np.power(im, 1.5))
+        im = cv2.merge(rgb)
+        im = (im * 256).astype(np.uint8)
 
-            # Apply thresholds to image
-            Seuil_bas=np.percentile(im,50)
-            Seuil_haut=np.percentile(im,99.99999)*1.1
-            cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
-            cc[cc<0]=0
-            img_color=cc
+        # Apply thresholds to image
+        Seuil_bas=np.percentile(im,50)
+        Seuil_haut=np.percentile(im,99.99999)*1.1
+        cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
+        cc[cc<0]=0
+        img_color=cc
 
-        if couleur != 'on':
-            cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),apply_watermark_if_enable(img_color, header, observer))
+    cv2.imwrite(os.path.join(wd,'sunscan_'+color+'.jpg'),apply_watermark_if_enable(img_color, header, observer))
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)

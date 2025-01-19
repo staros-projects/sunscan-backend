@@ -104,7 +104,7 @@ def blend_images(cc, result_image, mask):
 
     return blended_image
 
-def process_and_save_images(cc, result_image, output_dir, name, watermark_fct, header, observer, radius=390, feather_width=15):
+def process_and_save_images(cc, result_image, output_dir, name, watermark_fct, header, observer, desc):
     """
     Process and save the blended image with a circular mask.
 
@@ -120,6 +120,8 @@ def process_and_save_images(cc, result_image, output_dir, name, watermark_fct, h
     """
     height, width = cc.shape
     center = (width // 2, height // 2)
+    radius=390
+    feather_width=15
 
     # Create the circular mask
     mask = create_circular_mask((height, width), center, radius, feather_width)
@@ -130,7 +132,7 @@ def process_and_save_images(cc, result_image, output_dir, name, watermark_fct, h
 
 
     # Save the final blended image
-    cv2.imwrite(os.path.join(output_dir,name+'.jpg'), watermark_fct(blended_image//256,header,observer))
+    cv2.imwrite(os.path.join(output_dir,name+'.jpg'), watermark_fct(blended_image//256,header,observer, desc))
     cv2.imwrite(os.path.join(output_dir,name+'.png'),blended_image)
     return blended_image
 
@@ -153,13 +155,14 @@ def adjust_histogram(image):
 
     return adjusted_image.astype(np.uint16)
 
-def process_helium(WorkDir, frames, header, observer, watermark_fct):
+def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Image):
 
     fr1=np.copy(frames[1])
     fr2=np.copy(frames[2])
     fr0=np.copy(frames[0])
     s=np.array(np.array(fr1, dtype='float64')+np.array(fr2, dtype='float64'),dtype='float64')
     moy=s*0.5
+ 
     
     d=(np.array(fr0, dtype='float64')-moy)
 
@@ -177,6 +180,7 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct):
         cc=np.array((img_weak_array), dtype='uint16')
 
     cc = cv2.flip(cc,0)
+    moy = cv2.flip(moy,0)
 
     R = 406
     
@@ -184,7 +188,7 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct):
     corrected_image = apply_transversalium_correction(cc, R, median_projection)
 
     image1 = np.array(corrected_image, dtype=np.int32) 
-    image2 = np.array(cv2.flip(moy,0), dtype=np.int32)
+    image2 = np.array(moy, dtype=np.int32)
 
 
     constant = 32767
@@ -198,7 +202,7 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct):
     result_image = (result_image / max_value) * 65535.0
     result_image = result_image.astype(np.uint16)
 
-    res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium', watermark_fct, header, observer)
+    res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
 
     coef = 0.6
     result_image = image1 + coef * image2_transformed
@@ -207,8 +211,9 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct):
     result_image = (result_image / max_value) * 65535.0
     result_image = result_image.astype(np.uint16)
 
-    res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer)
-
+    res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
+    Colorise_Image(cc, WorkDir, header, observer)
+    
     coef = 0.6
     result_image = image1 + coef * image2_transformed
     result_image = np.clip(result_image, 0, 65535).astype(np.uint16)
@@ -221,8 +226,9 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct):
     moy = (moy / max_value) * 65535.0
     moy = moy.astype(np.uint16)
 
+    cont_image = watermark_fct(moy//256, header, observer, 'Continuum')
     cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.png'),moy)
-    cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.jpg'),moy//256)
+    cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.jpg'),cont_image)
     
     # Create and save a smaller preview image
     ccsmall = cv2.resize(res/256,  (0,0), fx=0.4, fy=0.4) 

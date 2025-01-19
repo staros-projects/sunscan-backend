@@ -89,7 +89,7 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
         os.mkdir(path)
         
     scans = []
-    regex = r"stacked_(clahe|cont|protus)_(\d)_(raw|sharpen).png"
+    regex = r"stacked_(helium|helium_cont|clahe|cont|protus)_(\d)_(raw|sharpen).png"
     for root, dirs, files in os.walk(path, topdown=False):
         stacking_dirname = None
         images = []
@@ -133,7 +133,9 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
                     stacking_dirname = os.path.dirname(file_path)
                     cti = int(os.path.getmtime(stacking_dirname))
 
-                    if "clahe" in file_path:
+                    if "helium" in file_path:
+                        images.append(file_path)
+                    elif "clahe" in file_path:
                         images.append(file_path)
                     elif "cont" in file_path:
                         images.append(file_path)
@@ -153,6 +155,8 @@ def get_scans(path='storage/scans/', withDetails=False):
         
     scans = []
     images_type = {'clahe':'Clahe + Unsharp mask',
+                    'helium_cont': 'Helium + Continuum',
+                    'helium': 'Helium',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
                     'cont':'Continuum : Clahe + Unsharp mask',
                     'doppler':'Doppler',
@@ -181,7 +185,7 @@ def get_scans(path='storage/scans/', withDetails=False):
 
     scans_with_status = []
     for s in scans:   
-        if os.path.exists(os.path.join(s['path'],'sunscan_clahe.jpg')):
+        if os.path.exists(os.path.join(s['path'],'sunscan_preview.jpg')):
             s['status'] = 'completed'
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'
