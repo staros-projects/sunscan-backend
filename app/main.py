@@ -74,6 +74,7 @@ class Scan(ScanBase):
     offset: int
     observer: str = ''
     description: str = ''
+    advanced: str = ''
 
 class CameraControls(BaseModel):
     exp: float
@@ -537,8 +538,8 @@ async def decreaseGain(request: Request):
         JSONResponse: Updated camera settings after stopping the recording.
     """
     if app.cameraController:
-        app.cameraController.stopRecord()
-        return getCameraControls()
+        scan_path = app.cameraController.stopRecord()
+        return JSONResponse(content={"scan": os.path.dirname(scan_path)}, status_code=200)
 
 @app.get("/camera/reset-controls/", response_class=JSONResponse)
 async def resetControls(request: Request):
@@ -700,7 +701,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
     """
     if (os.path.exists(scan.filename)):
         print(scan)
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer)
+        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer, advanced=scan.advanced)
 
 
 @app.post("/sunscan/process/stack/")
@@ -714,7 +715,11 @@ def process_stack(request: PostProcessRequest):
                 matching_paths.append(path)
         if len(matching_paths) == len(request.paths):
             required_files[required_file] = True
+    start_time = time.perf_counter()
     stack(request.paths, required_files, request.observer)
+    end_time = time.perf_counter()
+    print(f" {end_time - start_time:.6f} secondes") 
+    
      
 @app.post("/sunscan/process/animate/")
 def process_animate(request: PostProcessRequest):
@@ -795,6 +800,17 @@ async def create_tag_file(request: FileTagRequest):
     return {"message": f"File '{tag_filename}' created successfully."}
 
 
+def calculate_fwhm(y):
+    x = np.arange(len(y))
+    max_value = np.max(y)
+    half_max = max_value / 2.0
+    indices = np.where(y >= half_max)[0]
+    if len(indices) < 2:
+        return None
+    left_idx = indices[0]
+    right_idx = indices[-1]
+    fwhm = x[right_idx] - x[left_idx]
+    return fwhm
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -857,7 +873,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Send intensity and spectrum data for cropped images
                         if app.cameraController.cameraIsCropped() and not app.cameraController.isInColorMode():
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
-                            await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
+                            await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
                     # Apply normalization if enabled
                     if app.cameraController.normalizeMode()==1:    

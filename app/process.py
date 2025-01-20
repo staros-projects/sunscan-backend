@@ -7,8 +7,9 @@ from astropy.io import fits
 from Inti_recon import solex_proc 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
+from helium import process_helium
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer=''):
+def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced=''):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -40,6 +41,16 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     if not os.path.isdir(subrep):
         os.makedirs(subrep)
 
+    #Les param�tres sont les suivants, que je sugg�re d�adopter : d�calage par rapport � la raie Fe I = +74 pixiels
+    #Decalages pour le continuum par rapport � la raie He I : -11 pixels et +6 pixels.
+    helium = True if advanced == 'heI' else False
+
+    if helium:
+        offset = 74
+        noisereduction = True
+        contShift = 11
+        dopplerShift = -6
+
     Shift = [0, dopplerShift, contShift, offset, 0.0, 0.0]
     Flags =  {'DOPFLIP': False, 
             'SAVEPOLY': False, 
@@ -68,20 +79,34 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     solar_dict={}
     param=[0,0,autocrop_size,autocrop_size]
 
+    color = None
+    tag_files = [f for f in os.listdir(WorkDir) if f.startswith('tag_')]
+    if tag_files:
+        tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_'
+        color = tag_value
+
+    print('auto extracted line tag :'+color)
+
     try:
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
         
         header = update_header(WorkDir, header, observer)
-        # Create and save surface image
-        create_surface_image(WorkDir, frames, surfaceSharpLevel, header, observer)
-        # Create and save continuum image
-        create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
-        # Create and save prominence (protus) image
-        create_protus_image(WorkDir, frames, cercle, proSharpLevel, header, observer)
-        # If doppler contrast is enabled, create and save doppler image
-        if dopcont:
-            create_doppler_image(WorkDir, frames, header, observer)
+
+        if helium:
+            result_image = process_helium(WorkDir, frames, header, observer, apply_watermark_if_enable, Colorise_Image)
+
+ 
+        else:
+            # Create and save surface image
+            create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color)
+            # Create and save continuum image
+            create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
+            # Create and save prominence (protus) image
+            create_protus_image(WorkDir, frames, cercle, proSharpLevel, header, observer)
+            # If doppler contrast is enabled, create and save doppler image
+            if dopcont:
+                create_doppler_image(WorkDir, frames, header, observer)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -129,7 +154,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, level, header, observer):
+def create_surface_image(wd, frames, helium, level, header, observer, color):
     """
     Create and save various surface images of the sun.
 
@@ -193,10 +218,11 @@ def create_surface_image(wd, frames, level, header, observer):
         print(os.path.join(wd, 'sunscan_preview.jpg'))
     except Exception as e:
         print(e)
-    Colorise_Image('auto', cc, wd, header, observer)
 
-def apply_watermark_if_enable(frame, header, observer):
-    print('watermark', observer)
+    Colorise_Image(color, cc, wd, header, observer)
+
+def apply_watermark_if_enable(frame, header, observer, desc=''):
+    print('watermark', observer, desc)
     if not observer:
         return frame
     # Ensure the frame is in uint8 format
@@ -217,12 +243,13 @@ def apply_watermark_if_enable(frame, header, observer):
     draw = ImageDraw.Draw(image) 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 30)  # Use a specific font if available
     text_position = get_text_position(image)
-    draw.text(text_position, formatted_date, fill="white", font=font)
+    desc = ' - ' + desc if desc else ''
+    draw.text(text_position, formatted_date+desc, fill="white", font=font)
 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
-    draw.text(get_text_position(image, 126), 'SUNSCAN', fill="white", font=font)
-    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Thin.ttf", 30)  # Use a specific font if available
-    draw.text(get_text_position(image, 84), observer, fill="white", font=font)
+    draw.text(get_text_position(image, 115), 'SUNSCAN', fill="white", font=font)
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 20)  # Use a specific font if available
+    draw.text(get_text_position(image, 73), observer, fill="white", font=font)
     return np.array(image)
 
 def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
@@ -263,7 +290,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         cc = sharpenImage(cc, level)
 
         # save as png
-        cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer))
+        cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer, 'Continuum'))
         cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
@@ -446,74 +473,51 @@ def adjust_gamma(image, gamma=1.0):
 	# apply gamma correction using the lookup table
 	return cv2.LUT(image, table)
 
-def Colorise_Image (couleur_lbl, frame_contrasted, wd, header, observer):
-    # gestion couleur auto ou sur dropdown database compatibility
-    # 'Manual','Ha','Ha2cb','Cah','Cah1v','Cak','Cak1v','HeID3'
-    if couleur_lbl == 'auto' :
-        couleur = 'on' # mode detection auto basé sur histogramme simple
-    else :
-        if couleur_lbl[:2] == 'Ha' :
-            couleur='H-alpha'
-        if couleur_lbl[:3] == 'Ha2' :
-            couleur='Pale'
-        if couleur_lbl[:2] == 'Ca' :
-            couleur='Calcium'
-        if couleur_lbl[:2] == 'He' :
-            couleur='Pale'
+def Colorise_Image(color, frame_contrasted, wd, header, observer):
+    if not color:
+        return
     
+    rules = {
+        'halpha':       { 'b':3.87, 'g':1.35, 'r':0.60, 'thresholds':68, 'gamma':1.2 },
+        'caIIH':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8   },
+        'caIIK':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8  },
+        'hbeta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'hgamma':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'hdelta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'hepsilon':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'mgI1':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
+        'mgI2':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
+        'mgI3':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
+        'heI':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':0, 'gamma':1.0  },
+        'sodium':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':0, 'gamma':1.0  },
+    }
+
+    img_color = None
     f=frame_contrasted/256
     f_8=f.astype('uint8')
-    
-    #hist = cv2.calcHist([f_8],[0],None,[256],[10,256])
-    # separe les 2 pics fond et soleil
-    th_otsu,img_binarized=cv2.threshold(f_8, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    hist = cv2.calcHist([f_8],[0],None,[256],[0,256])
-    hist[0:int(th_otsu)]=0
-    pos_max=np.argmax(hist)
 
-    if couleur =='on' :  
-        if pos_max<200 and pos_max>=70 :
-            couleur="H-alpha"
-        if pos_max<70 :
-            couleur="Calcium"
-    
-    if couleur != '' :
-        # image couleur en h-alpha
-        if couleur == 'H-alpha' :
-            # Apply gamma correction
-            im = im = adjust_gamma(f_8,1.2)
-            im = im.astype(np.float32) / 256
-            # Create RGB channels with different gamma values
-            rgb = (np.power(im, 3.87), np.power(im, 1.35), np.power(im, 0.6))
-            im = cv2.merge(rgb)
-            im = (im * 256).astype(np.uint16)
-
-            # Apply thresholds to H-alpha image
-            Seuil_bas=np.percentile(im,68)
-            Seuil_haut=np.percentile(im,99.9999)*1.05
-            cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
-            cc[cc<0]=0
-            img_color=cc
-            
-        # image couleur en calcium
-        if couleur == 'Calcium' :
-            # Apply gamma correction
-            im = adjust_gamma(f_8,1.8)
-            im = im.astype(np.float32) / 256
-            # Create RGB channels with different gamma values
-            rgb = (np.power(im, 0.8), np.power(im, 1.5), np.power(im, 1.5))
-            im = cv2.merge(rgb)
-            im = (im * 256).astype(np.uint8)
-
+    if color in rules.keys():
+        r = rules[color]
+        # Apply gamma correction
+        im = adjust_gamma(f_8,r['gamma'])
+        im = im.astype(np.float32) / 256
+        # Create BGR channels with different gamma values
+        bgr = (np.power(im, r['b']), np.power(im, r['g']), np.power(im, r['r']))
+        im = cv2.merge(bgr)
+        im = (im * 256).astype(np.uint8)
+        if r['thresholds'] > 0 :
             # Apply thresholds to image
-            Seuil_bas=np.percentile(im,50)
-            Seuil_haut=np.percentile(im,99.99999)*1.1
+            Seuil_bas=np.percentile(im,r['thresholds'])
+            Seuil_haut=np.percentile(im,99.99999)*1.10
             cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
             cc[cc<0]=0
             img_color=cc
-
-        cv2.imwrite(os.path.join(wd,'sunscan_clahe_colour.jpg'),apply_watermark_if_enable(img_color, header, observer))
-        return img_color
+        else:
+            img_color=im
+        
+        cv2.imwrite(os.path.join(wd,'sunscan_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        ccsmall = cv2.resize(img_color//256,  (0,0), fx=0.4, fy=0.4) 
+        cv2.imwrite(os.path.join(wd, 'sunscan_preview_c.jpg'),ccsmall)
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)
@@ -544,4 +548,4 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("/var/www/sunscan-backend/app/storage/scans/2024_11_22/sunscan_2024_11_22-12_59_03/scan.ser", mock_callback, False, True, 1100)
+    process_scan("C:\\Users\\g-ber\\Downloads\\helium.ser", mock_callback, False, True, 1100, False, advanced='helium')
