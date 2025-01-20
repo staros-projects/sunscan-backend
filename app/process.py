@@ -516,8 +516,6 @@ def Colorise_Image(color, frame_contrasted, wd, header, observer):
             img_color=im
         
         cv2.imwrite(os.path.join(wd,'sunscan_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
-        ccsmall = cv2.resize(img_color//256,  (0,0), fx=0.4, fy=0.4) 
-        cv2.imwrite(os.path.join(wd, 'sunscan_preview_c.jpg'),ccsmall)
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)
