@@ -193,17 +193,17 @@ def correct_image_png(input_name, dx_map, dy_map):
 
 
 def stack(paths, status, observer):
-    if not status['clahe']:
+    if not status['clahe'] and not status['helium']:
         return 
 
-    clahe_basefilename =  'sunscan_clahe.png'
-    cont_basefilename =  'sunscan_cont.png'
+    clahe_basefilename =  'sunscan_clahe.png' if not status['helium'] else 'sunscan_helium.png'
+    cont_basefilename =  'sunscan_cont.png' if not status['helium'] else 'sunscan_helium_cont.png'
 
     deformed_root = os.path.join(os.path.dirname(paths[0]) ,clahe_basefilename)
     sum_image = imageio.v2.imread(deformed_root )
     sum_image = sum_image.astype(np.uint32) 
 
-    if status['cont']:
+    if status['cont'] or status['helium_cont']:
         cont_deformed_root = os.path.join(os.path.dirname(paths[0]) ,cont_basefilename)
         cont_sum_image = imageio.v2.imread(cont_deformed_root )
         cont_sum_image = cont_sum_image.astype(np.uint32) 
@@ -234,14 +234,14 @@ def stack(paths, status, observer):
         # Correction des distorsions dans la s�quence principale (format PNG en entr�e)
         corrected_image = correct_image_png(deformed_name, dx_map, dy_map)
 
-        if status['cont']:
+        if status['cont'] or status['helium_cont']:
             cont_deformed_name = os.path.join(os.path.dirname(p) ,cont_basefilename)
             corrected_cont_image = correct_image_png(cont_deformed_name, dx_map, dy_map)
         
         # Sommation (stacking)
         if i>1:
             sum_image = sum_image + corrected_image.astype(np.uint32)
-            if status['cont']:
+            if status['cont'] or status['helium_cont']:
                 cont_sum_image = cont_sum_image + corrected_cont_image.astype(np.uint32)
 
         print('Scan #' + p)
@@ -264,14 +264,18 @@ def stack(paths, status, observer):
         os.mkdir(work_dir)
 
     watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime
+    watermark_txt_t = watermark_txt
     if tag:
-        watermark_txt += ' - '+ tag
+        watermark_txt_t += ' - '+ tag
 
-    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt, observer)
-    if status['cont']: 
+    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt_t, observer)
+ 
+    if status['helium_cont']: 
+        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer)
+    elif status['cont']: 
         write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer)
 
-
+        
 def apply_watermark_if_enable(frame, text, observer):
     print('watermark', observer)
     if not observer:
@@ -287,9 +291,9 @@ def apply_watermark_if_enable(frame, text, observer):
     draw.text(text_position, text, fill="white", font=font)
 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
-    draw.text(get_text_position(image, 126), 'SUNSCAN', fill="white", font=font)
-    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Thin.ttf", 30)  # Use a specific font if available
-    draw.text(get_text_position(image, 84), observer, fill="white", font=font)
+    draw.text(get_text_position(image, 115), 'SUNSCAN', fill="white", font=font)
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 20)  # Use a specific font if available
+    draw.text(get_text_position(image, 73), observer, fill="white", font=font)
     return np.array(image)
 
 

@@ -59,9 +59,9 @@ def add_watermark(image: Image.Image, observer: str) -> Image.Image:
     draw = ImageDraw.Draw(image)
 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
-    draw.text(get_text_position(image, 126), 'SUNSCAN', fill="white", font=font)
-    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Thin.ttf", 30)  # Use a specific font if available
-    draw.text(get_text_position(image, 84), observer, fill="white", font=font)
+    draw.text(get_text_position(image, 115), 'SUNSCAN', fill="white", font=font)
+    font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 20)  # Use a specific font if available
+    draw.text(get_text_position(image, 73), observer, fill="white", font=font)
     return image
 
 def resize_frame(image: Image.Image) -> Image.Image:
@@ -113,7 +113,20 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
 
 
     # Check if the output path contains "clahe" and create a preview gif
-    if "clahe" in str(output_path).lower():
+    if "helium_cont" in str(output_path).lower():
+        # Resize the frames to 250px width and height
+        preview_frames = [frame.resize((250, 250), Image.Resampling.LANCZOS) for frame in frames]
+        preview_output_path = os.path.join(os.path.dirname(output_path), "animated_preview.gif")
+        preview_frames[0].save(
+            preview_output_path,
+            save_all=True,
+            append_images=preview_frames[1:],
+            duration=frame_duration,  # Frame duration in ms
+            loop=0,  # Infinite loop
+            dither=True
+        )
+        print(f"Preview GIF saved at {preview_output_path}")
+    elif "clahe" in str(output_path).lower():
         # Resize the frames to 250px width and height
         preview_frames = [frame.resize((250, 250), Image.Resampling.LANCZOS) for frame in frames]
         preview_output_path = os.path.join(os.path.dirname(output_path), "animated_preview.gif")

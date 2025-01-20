@@ -706,7 +706,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
 
 @app.post("/sunscan/process/stack/")
 def process_stack(request: PostProcessRequest):
-    required_files = {"clahe": False, "protus": False, "cont": False}
+    required_files = {"clahe": False, "protus": False, "cont": False, "color":False, "helium":False, "helium_cont":False}
     for required_file, status in required_files.items():
         matching_paths = []
         for path_str in request.paths:
@@ -724,9 +724,11 @@ def process_stack(request: PostProcessRequest):
 @app.post("/sunscan/process/animate/")
 def process_animate(request: PostProcessRequest):
     # Supported filenames and output GIF names
-    required_files = ["sunscan_clahe.png", "sunscan_protus.png", "sunscan_cont.png"]
+
     gif_names = {
         "sunscan_clahe.png": "animated_clahe.gif",
+        "sunscan_helium.png": "animated_helium.gif",
+        "sunscan_helium_cont.png": "animated_helium_cont.gif",
         "sunscan_protus.png": "animated_protus.gif",
         "sunscan_cont.png": "animated_cont.gif",
     }
@@ -743,7 +745,7 @@ def process_animate(request: PostProcessRequest):
         os.mkdir(work_dir)
 
     # Check for each required file type and generate GIFs if possible
-    for required_file in required_files:
+    for required_file in gif_names.keys():
         matching_paths = []
 
         for path_str in request.paths:
