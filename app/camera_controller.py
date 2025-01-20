@@ -272,6 +272,7 @@ class CameraController:
         self._record = False
         print(self._fc,self._time_in_progress,self._t0)
         print(f"frame count : {self._fc} time:{self._time_in_progress-self._t0} fps:{self._fc/(self._time_in_progress-self._t0)}")
+        return self._final_ser_filename
 
     def _initSerFile(self):
         """

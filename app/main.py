@@ -538,8 +538,8 @@ async def decreaseGain(request: Request):
         JSONResponse: Updated camera settings after stopping the recording.
     """
     if app.cameraController:
-        app.cameraController.stopRecord()
-        return getCameraControls()
+        scan_path = app.cameraController.stopRecord()
+        return JSONResponse(content={"scan": os.path.dirname(scan_path)}, status_code=200)
 
 @app.get("/camera/reset-controls/", response_class=JSONResponse)
 async def resetControls(request: Request):

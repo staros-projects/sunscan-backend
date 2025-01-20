@@ -43,7 +43,8 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
 
     #Les param�tres sont les suivants, que je sugg�re d�adopter : d�calage par rapport � la raie Fe I = +74 pixiels
     #Decalages pour le continuum par rapport � la raie He I : -11 pixels et +6 pixels.
-    helium = True if advanced == 'helium' else False
+    helium = True if advanced == 'heI' else False
+
     if helium:
         offset = 74
         noisereduction = True
@@ -78,6 +79,14 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     solar_dict={}
     param=[0,0,autocrop_size,autocrop_size]
 
+    color = None
+    tag_files = [f for f in os.listdir(WorkDir) if f.startswith('tag_')]
+    if tag_files:
+        tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_'
+        color = tag_value
+
+    print('auto extracted line tag :'+color)
+
     try:
         # Process the SER file using solex_proc function
         frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
@@ -90,7 +99,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
  
         else:
             # Create and save surface image
-            create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer)
+            create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color)
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
@@ -145,7 +154,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, helium, level, header, observer):
+def create_surface_image(wd, frames, helium, level, header, observer, color):
     """
     Create and save various surface images of the sun.
 
@@ -210,7 +219,7 @@ def create_surface_image(wd, frames, helium, level, header, observer):
     except Exception as e:
         print(e)
 
-    Colorise_Image(cc, wd, header, observer)
+    Colorise_Image(color, cc, wd, header, observer)
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
     print('watermark', observer, desc)
@@ -464,44 +473,51 @@ def adjust_gamma(image, gamma=1.0):
 	# apply gamma correction using the lookup table
 	return cv2.LUT(image, table)
 
-def Colorise_Image(frame_contrasted, wd, header, observer):
-    color = None
-    tag_files = [f for f in os.listdir(wd) if f.startswith('tag_')]
-    if tag_files:
-        tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_'
-        color = tag_value
+def Colorise_Image(color, frame_contrasted, wd, header, observer):
     if not color:
-        return 
+        return
     
     rules = {
-        'ha':       { 'b':3.87, 'g':1.35, 'r':0.60, 'thresholds':True },
-        'caII':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':True },
-        'hbeta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':True },
-        'mgI':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':True },
-        'heI':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':False },
+        'halpha':       { 'b':3.87, 'g':1.35, 'r':0.60, 'thresholds':68, 'gamma':1.2 },
+        'caIIH':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8   },
+        'caIIK':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8  },
+        'hbeta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'hgamma':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'hdelta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'hepsilon':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
+        'mgI1':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
+        'mgI2':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
+        'mgI3':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
+        'heI':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':0, 'gamma':1.0  },
+        'sodium':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':0, 'gamma':1.0  },
     }
 
     img_color = None
     f=frame_contrasted/256
     f_8=f.astype('uint8')
 
-    if color in rules:
+    if color in rules.keys():
         r = rules[color]
         # Apply gamma correction
-        im = adjust_gamma(f_8,1.2)
+        im = adjust_gamma(f_8,r['gamma'])
         im = im.astype(np.float32) / 256
         # Create BGR channels with different gamma values
         bgr = (np.power(im, r['b']), np.power(im, r['g']), np.power(im, r['r']))
         im = cv2.merge(bgr)
         im = (im * 256).astype(np.uint8)
-        if r['thresholds']:
+        if r['thresholds'] > 0 :
             # Apply thresholds to image
-            Seuil_bas=np.percentile(im,50)
-            Seuil_haut=np.percentile(im,99.99999)*1.1
+            Seuil_bas=np.percentile(im,r['thresholds'])
+            Seuil_haut=np.percentile(im,99.99999)*1.10
             cc=(im-Seuil_bas)*(256/(Seuil_haut-Seuil_bas))
             cc[cc<0]=0
             img_color=cc
-        cv2.imwrite(os.path.join(wd,'sunscan_'+color+'_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        else:
+            img_color=im
+        
+        cv2.imwrite(os.path.join(wd,'sunscan_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        ccsmall = cv2.resize(img_color//256,  (0,0), fx=0.4, fy=0.4) 
+        cv2.imwrite(os.path.join(wd, 'sunscan_preview_c.jpg'),ccsmall)
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)
