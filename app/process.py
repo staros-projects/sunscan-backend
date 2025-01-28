@@ -7,7 +7,7 @@ from astropy.io import fits
 from Inti_recon import solex_proc 
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
-from helium import process_helium
+from helium import process_helium, create_circular_mask, blend_images
 
 def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced=''):
     """
@@ -84,8 +84,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     if tag_files:
         tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_'
         color = tag_value
-
-    print('auto extracted line tag :'+color)
+        print('auto extracted line tag :'+color)
 
     try:
         # Process the SER file using solex_proc function
@@ -99,11 +98,11 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
  
         else:
             # Create and save surface image
-            create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color)
+            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color)
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
-            create_protus_image(WorkDir, frames, cercle, proSharpLevel, header, observer)
+            create_protus_image(WorkDir, raw, proSharpLevel, header, observer)
             # If doppler contrast is enabled, create and save doppler image
             if dopcont:
                 create_doppler_image(WorkDir, frames, header, observer)
@@ -220,6 +219,7 @@ def create_surface_image(wd, frames, helium, level, header, observer, color):
         print(e)
 
     Colorise_Image(color, cc, wd, header, observer)
+    return raw
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
     print('watermark', observer, desc)
@@ -295,7 +295,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, frames, cercle, level, header, observer):
+def create_protus_image(wd, raw, level, header, observer, name="sunscan_protus"):
     """
     Create and save a prominence (protus) image of the sun.
 
@@ -307,47 +307,25 @@ def create_protus_image(wd, frames, cercle, level, header, observer):
     Returns:
         None
     """
+    raw=cv2.flip(raw,0)
 
-    # Generate PNG image
-    # Image with average thresholds
-    frame1 = np.copy(frames[0])
-    sub_frame = frame1[5:,:-5]
-    Seuil_haut = np.percentile(sub_frame, 99.999)  # Upper threshold
-    Seuil_bas = (Seuil_haut * 0.35)  # Lower threshold
-    frame1[frame1 > Seuil_haut] = Seuil_haut  # Cap values at upper threshold
-    fc = (frame1 - Seuil_bas) * (65500 / (Seuil_haut - Seuil_bas))  # Apply contrast
-    fc[fc < 0] = 0  # Remove negative values
-    frame_contrasted = np.array(fc, dtype='uint16')
-    frame_contrasted = cv2.flip(frame_contrasted, 0)  # Flip image vertically
-        
-    sub_frame = frame1[5:,:-5]
-    Seuil_haut = np.percentile(sub_frame, 99.999)  # Recalculate upper threshold
-    Seuil_bas = (Seuil_haut * 0.25)  # Recalculate lower threshold
-    frame1[frame1 > Seuil_haut] = Seuil_haut  # Cap values at new upper threshold
-    fc2 = (frame1 - Seuil_bas) * (65500 / (Seuil_haut - Seuil_bas))  # Apply contrast
-    fc2[fc2 < 0] = 0  # Remove negative values
+    height, width = raw.shape
+    center = (width // 2, height // 2)
+  
+    
+    # Create the circular mask
+    mask = create_circular_mask((height, width), center, 409, 3)
 
-    frame2 = np.copy(frames[0])
-    disk_limit_percent = 0.002  # Black disk radius inferior by 2% to disk edge (was 1%)
-    if cercle[0] != 0:
-        x0 = cercle[0]  # Center x-coordinate
-        y0 = cercle[1]  # Center y-coordinate
+    # Blend the images
+    blended_image = blend_images(raw, np.zeros(raw.shape), mask)
+    
+    Threshold_Upper = np.percentile(blended_image, 99.9999) * 0.5  # Preference for high contrast
+    Threshold_low = 0
+    img_seuil = seuil_image_force(blended_image, Threshold_Upper, Threshold_low)
+    
+    frame_contrasted3 = np.array(img_seuil, dtype='uint16')
+    frame_contrasted3 = cv2.flip(frame_contrasted3, 0)  # Flip image vertically
 
-        wi = int(cercle[2])  # Width
-        he = int(cercle[3])  # Height
-        r = (min(wi, he))  # Radius
-        r = int(r - round(r * disk_limit_percent)) - 1  # Adjust radius (modified June 2023) - 1 pixel removed
-
-        fc3 = cv2.circle(frame2, (x0, y0), r, 80, -1, lineType=cv2.LINE_AA)  # Draw circle
-        frame1 = np.copy(fc3)
-        Threshold_Upper = np.percentile(frame1, 99.9999) * 0.5  # Preference for high contrast
-        Threshold_low = 0
-        img_seuil = seuil_image_force(frame1, Threshold_Upper, Threshold_low)
-        
-        frame_contrasted3 = np.array(img_seuil, dtype='uint16')
-        frame_contrasted3 = cv2.flip(frame_contrasted3, 0)  # Flip image vertically
-    else:   
-        frame_contrasted3 = frame_contrasted
 
     # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
     clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
@@ -363,8 +341,8 @@ def create_protus_image(wd, frames, cercle, level, header, observer):
     cc = sharpenImage(cc, level)  # Sharpen the image
 
     # Save as PNG and JPG
-    cv2.imwrite(os.path.join(wd, 'sunscan_protus.jpg'), apply_watermark_if_enable(cc//256,header,observer))
-    cv2.imwrite(os.path.join(wd, 'sunscan_protus.png'), cc)
+    cv2.imwrite(os.path.join(wd, name+'.jpg'), apply_watermark_if_enable(cc//256,header,observer))
+    cv2.imwrite(os.path.join(wd, name+'.png'), cc)
 
 def create_doppler_image(wd, frames, header, observer):
     """
@@ -397,6 +375,8 @@ def create_doppler_image(wd, frames, header, observer):
             # sauvegarde en png 
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
+
+            create_protus_image(wd, img_doppler, 1, header, observer, name="sunscan_protus_doppler")
                 
         except:
             pass
@@ -546,4 +526,4 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("C:\\Users\\g-ber\\Downloads\\helium.ser", mock_callback, False, True, 1100, False, advanced='helium')
+    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-14_54_41\\scan.ser", mock_callback, False, True, 1100, False, advanced='')

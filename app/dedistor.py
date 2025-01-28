@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
-from process import sharpenImage, get_text_position
+from process import sharpenImage, get_text_position, create_protus_image
 from storage import get_scan_tag
 
 # ------------------------------------
@@ -315,3 +315,5 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
 
     ccsmall = cv2.resize(sum_image/256,  (0,0), fx=0.4, fy=0.4)    
     cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
+
+    create_protus_image(work_dir, sum_image, 1, None, observer)
