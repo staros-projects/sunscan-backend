@@ -341,8 +341,11 @@ def create_protus_image(wd, raw, level, header, observer, name="sunscan_protus")
     cc = sharpenImage(cc, level)  # Sharpen the image
 
     # Save as PNG and JPG
-    cv2.imwrite(os.path.join(wd, name+'.jpg'), apply_watermark_if_enable(cc//256,header,observer))
-    cv2.imwrite(os.path.join(wd, name+'.png'), cc)
+    if name:
+        cv2.imwrite(os.path.join(wd, name+'.jpg'), apply_watermark_if_enable(cc//256,header,observer))
+        cv2.imwrite(os.path.join(wd, name+'.png'), cc)
+    else:
+        return cc
 
 def create_doppler_image(wd, frames, header, observer):
     """

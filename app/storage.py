@@ -105,7 +105,8 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
                         images.append(file_path)
                     elif "stacked_cont" in file_path:
                         images.append(file_path)
-
+                    elif "stacked_protus" in file_path:
+                        images.append(file_path)
                     match = re.match(regex, name)
                     if match:
                         stacked_img_count = match.group(2)

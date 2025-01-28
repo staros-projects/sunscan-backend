@@ -204,6 +204,8 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Im
 
     res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
 
+
+
     coef = 0.6
     result_image = image1 + coef * image2_transformed
     result_image = np.clip(result_image, 0, 65535).astype(np.uint16)

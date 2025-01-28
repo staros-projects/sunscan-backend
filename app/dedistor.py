@@ -305,15 +305,19 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
     if max_value != 0:
         sum_image = (sum_image / max_value) * 65535.0
     sum_image = sum_image.astype(np.uint16)
+    raw = sum_image
 
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
     sum_image = sharpenImage(sum_image, 1 if scan_count<8 else 2)
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
-
+    if type == 'clahe':
+        cc = create_protus_image(work_dir, raw, 0, None, observer, None)
+        imageio.v2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.png'), cc, format="png")
+        cv2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(cc//256,text,observer))
 
     ccsmall = cv2.resize(sum_image/256,  (0,0), fx=0.4, fy=0.4)    
     cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
 
-    create_protus_image(work_dir, sum_image, 1, None, observer)
+    
