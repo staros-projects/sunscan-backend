@@ -102,7 +102,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
-            create_protus_image(WorkDir, cv2.flip(raw,0), proSharpLevel, header, observer)
+            create_protus_image(WorkDir, cv2.flip(raw,0), proSharpLevel, header, observer, 'sunscan_protus')
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
             if dopcont:
@@ -296,7 +296,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, raw, level, header, observer, name="sunscan_protus"):
+def create_protus_image(wd, raw, level, header, observer, name=None):
     """
     Create and save a prominence (protus) image of the sun.
     """
@@ -322,7 +322,7 @@ def create_protus_image(wd, raw, level, header, observer, name="sunscan_protus")
     clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
     cl1 = clahe.apply(frame_contrasted3)
     
-    Seuil_bas = np.percentile(cl1, 50)  # Lower threshold
+    Seuil_bas = np.percentile(cl1, 60)  # Lower threshold
     Seuil_haut = np.percentile(cl1, 99.9999) * 1.05  # Upper threshold
 
     cc = (cl1 - Seuil_bas) * (65000 / (Seuil_haut - Seuil_bas))  # Apply contrast
@@ -371,9 +371,9 @@ def create_doppler_image(wd, frames, header, observer):
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
 
             print('create_protus_image eclipse doppler')
-            i1 = create_protus_image(wd, i1, 0, header, observer)
-            i2 = create_protus_image(wd, i2, 0, header, observer)
-            i3 = create_protus_image(wd, i3, 0, header, observer)
+            i1 = create_protus_image(wd, f1, 0, header, observer)
+            i2 = create_protus_image(wd, moy, 0, header, observer)
+            i3 = create_protus_image(wd, f2, 0, header, observer)
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
@@ -533,4 +533,4 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-14_54_41\\scan.ser", mock_callback, False, True, 1100, False, advanced='')
+    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-14_54_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
