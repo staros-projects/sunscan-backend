@@ -102,8 +102,9 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
-            create_protus_image(WorkDir, raw, proSharpLevel, header, observer)
+            create_protus_image(WorkDir, cv2.flip(raw,0), proSharpLevel, header, observer)
             # If doppler contrast is enabled, create and save doppler image
+            print('doppler:', dopcont)
             if dopcont:
                 create_doppler_image(WorkDir, frames, header, observer)
         # Call the callback function to indicate successful completion
@@ -298,21 +299,11 @@ def create_continuum_image(wd, frames, level, header, observer):
 def create_protus_image(wd, raw, level, header, observer, name="sunscan_protus"):
     """
     Create and save a prominence (protus) image of the sun.
-
-    Args:
-        wd (str): Working directory to save images.
-        frames (list): List of image frames.
-        cercle (tuple): Parameters defining the solar disk circle.
-
-    Returns:
-        None
     """
-    raw=cv2.flip(raw,0)
-
     height, width = raw.shape
     center = (width // 2, height // 2)
-  
-    
+
+    print(name)
     # Create the circular mask
     mask = create_circular_mask((height, width), center, 409, 3)
 
@@ -370,18 +361,31 @@ def create_doppler_image(wd, frames, header, observer):
             i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
             i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
             
-            img_doppler[:,:,0] = i3 # blue
+            img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
-            img_doppler[:,:,2] = i1 # red
+            img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
             # sauvegarde en png 
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
 
-            create_protus_image(wd, img_doppler, 1, header, observer, name="sunscan_protus_doppler")
+            print('create_protus_image eclipse doppler')
+            i1 = create_protus_image(wd, i1, 0, header, observer)
+            i2 = create_protus_image(wd, i2, 0, header, observer)
+            i3 = create_protus_image(wd, i3, 0, header, observer)
+            img_doppler[:,:,0] = i1 # blue
+            img_doppler[:,:,1] = i2 # green
+            img_doppler[:,:,2] = i3 # red
+
+            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
+            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)
+
+
+            
                 
-        except:
+        except Exception as e:
+            print(e)
             pass
         
 
