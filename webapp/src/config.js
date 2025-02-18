@@ -1,5 +1,5 @@
 // set 'development' or 'production'
-const ENVIRONMENT = 'development';
+const ENVIRONMENT = 'production';
 
 // Dev environments URLs
 const devConfig = {
