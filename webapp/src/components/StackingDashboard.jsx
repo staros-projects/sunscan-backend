@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getDateFolders, downloadScan, downloadMultipleScans, deleteScanFolders } from '../api';
+import { getStackingFolders, downloadStackingFile, downloadMultipleStackingFolders, deleteStackingFolders } from '../api';
 import Layout from './Layout';
-import { config, devLog } from '../config';
+import { devLog } from '../config';
 import './Dashboard.css';
 
-// composant pour afficher la liste des dossiers par dates (racine du dossier storaage/scans)
-
-const ScansDashboard = () => {
-  const [dateFolders, setDateFolders] = useState([]);
-  const [selectedFolders, setSelectedFolders] = useState([]);
+const StackingDashboard = () => {
+  const [files, setFiles] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -17,70 +15,43 @@ const ScansDashboard = () => {
   const [deleteStatus, setDeleteStatus] = useState('');
 
   useEffect(() => {
-    getDateFolders().then((items)=>{
-      // Sort by the name field
+    getStackingFolders().then((items) => {
       const sortedItems = items.sort((a, b) => a.name.localeCompare(b.name));
-      setDateFolders(sortedItems);
+      setFiles(sortedItems);
     });
   }, []);
 
-  const handleSelectFolder = (folder) => {
-    setSelectedFolders(prev => {
-      if (prev.includes(folder.name)) {
-        return prev.filter(f => f !== folder.name);
+  const handleSelectFile = (file) => {
+    setSelectedFiles(prev => {
+      if (prev.includes(file.name)) {
+        return prev.filter(f => f !== file.name);
       }
-      return [...prev, folder.name];
+      return [...prev, file.name];
     });
   };
 
   const handleSelectAll = () => {
-    if (selectedFolders.length === dateFolders.length) {
-      setSelectedFolders([]);
+    if (selectedFiles.length === files.length) {
+      setSelectedFiles([]);
     } else {
-      setSelectedFolders(dateFolders.map(folder => folder.name));
+      setSelectedFiles(files.map(file => file.name));
     }
   };
 
   const downloadSelected = async () => {
-    if (selectedFolders.length === 0) return;
+    if (selectedFiles.length === 0) return;
     
     setIsLoading(true);
     setDownloadStatus('Preparing download...');
     
     try {
-      if (selectedFolders.length === 1) {
-        await downloadScan(selectedFolders[0]);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } else {
-        // On attend que le téléchargement commence réellement
-        await downloadMultipleScans(selectedFolders);
-      }
-      setDownloadStatus('Download started!');
-    } catch (error) {
-      console.error('Error downloading folders:', error);
-      setDownloadStatus('Download failed. Please try again.');
-      // si erreur
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } finally {
-      setIsLoading(false);
-      setDownloadStatus('');
-    }
-  };
+        await downloadMultipleStackingFolders(selectedFiles);
 
-  const downloadAll = async () => {
-    if (dateFolders.length === 0) return;
-    
-    setIsLoading(true);
-    setDownloadStatus('Preparing download...');
-    
-    try {
-      // download start
-      await downloadMultipleScans(dateFolders.map(folder => folder.name));
       setDownloadStatus('Download started!');
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
-      console.error('Error downloading all folders:', error);
+      console.error('Error downloading files:', error);
       setDownloadStatus('Download failed. Please try again.');
-      // erreur
       await new Promise(resolve => setTimeout(resolve, 2000));
     } finally {
       setIsLoading(false);
@@ -89,7 +60,7 @@ const ScansDashboard = () => {
   };
 
   const handleDelete = async () => {
-    if (selectedFolders.length === 0) return;
+    if (selectedFiles.length === 0) return;
     setShowDeleteConfirm(true);
   };
 
@@ -99,16 +70,14 @@ const ScansDashboard = () => {
     setDeleteStatus('Deleting folders...');
 
     try {
-      await deleteScanFolders(selectedFolders);
+      await deleteStackingFolders(selectedFiles);
       setDeleteStatus('Folders deleted successfully!');
       
       // Rafraîchir la liste des dossiers
-      const items = await getDateFolders();
+      const items = await getStackingFolders();
       const sortedItems = items.sort((a, b) => a.name.localeCompare(b.name));
-      setDateFolders(sortedItems);
-      
-      // Réinitialiser la sélection
-      setSelectedFolders([]);
+      setFiles(sortedItems);
+      setSelectedFiles([]);
       
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error) {
@@ -121,19 +90,26 @@ const ScansDashboard = () => {
     }
   };
 
-  // date
-  const formatDate = (folderName) => {
+  // date et heure
+  const formatDateTime = (folderName) => {
     try {
-      const [year, month, day] = folderName.split('_');
-      return `${year}/${month}/${day}`;
+      const [datePart, timePart] = folderName.split('_');
+      
+      // date 
+      const formattedDate = datePart.replaceAll('-', '/');
+      
+      // heure 
+      const formattedTime = timePart.replaceAll('-', ':');
+      
+      return `${formattedDate} - ${formattedTime}`;
     } catch (error) {
-      console.error('Error formatting date:', error);
+      console.error('Error formatting date time:', error);
       return folderName;
     }
   };
 
   return (
-    <Layout title={`Scans`} subtitle={`All scans`} backLink={`/`}>
+    <Layout title={`Stacked`} subtitle={`All stacked folders`} backLink={`/`}>
       {(isLoading && downloadStatus) || (isDeleting && deleteStatus) ? (
         <div className="waiting-popup">
           <div className="waiting-message">
@@ -147,7 +123,7 @@ const ScansDashboard = () => {
         <div className="confirm-popup">
           <div className="confirm-message">
             <h3>Confirm Deletion</h3>
-            <p>Are you sure you want to delete {selectedFolders.length} folder(s)?</p>
+            <p>Are you sure you want to delete {selectedFiles.length} folder(s)?</p>
             <p className="warning">This action cannot be undone!</p>
             <div className="confirm-actions">
               <button 
@@ -170,50 +146,51 @@ const ScansDashboard = () => {
       <div className="dashboard-actions">
         <button 
           onClick={downloadSelected} 
-          disabled={selectedFolders.length === 0 || isLoading}
+          disabled={selectedFiles.length === 0 || isLoading}
           className="action-button"
         >
-          Download Selected ({selectedFolders.length})
-        </button>
-        <button 
-          onClick={downloadAll}
-          disabled={isLoading}
-          className="action-button"
-        >
-          Download All ({dateFolders.length})
+          Download Selected ({selectedFiles.length})
         </button>
         <button 
           onClick={handleSelectAll}
           className="action-button"
         >
-          {selectedFolders.length === dateFolders.length ? 'Unselect All' : 'Select All'}
+          {selectedFiles.length === files.length ? 'Unselect All' : 'Select All'}
         </button>
         <button 
           onClick={handleDelete}
-          disabled={selectedFolders.length === 0 || isLoading || isDeleting}
+          disabled={selectedFiles.length === 0 || isLoading || isDeleting}
           className="action-button delete-button"
         >
-          Delete Selected ({selectedFolders.length})
+          Delete Selected ({selectedFiles.length})
         </button>
       </div>
 
       <div className="folder-grid">
-        {dateFolders.map(folder => (
-          <div key={folder.name} className="folder-item">
+        {files.map(file => (
+          <div key={file.name} className="folder-item">
             <div className="folder-checkbox">
               <input
                 type="checkbox"
-                checked={selectedFolders.includes(folder.name)}
-                onChange={() => handleSelectFolder(folder)}
+                checked={selectedFiles.includes(file.name)}
+                onChange={() => handleSelectFile(file)}
               />
             </div>
-            <Link to={`/date/${folder.name}`} className="folder-link">
+            <Link 
+              to={`/stacking/${file.name}/${file.name}`}
+              className="folder-link"
+              onClick={(e) => {
+                if (e.target.tagName === 'INPUT') {
+                  e.preventDefault();
+                }
+              }}
+            >
               <div className="folder-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
+                  <path fillRule="evenodd" d="M5.625 1.5H9a3.75 3.75 0 013.75 3.75v1.875c0 1.036.84 1.875 1.875 1.875H16.5a3.75 3.75 0 013.75 3.75v7.875c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 01-1.875-1.875V3.375c0-1.036.84-1.875 1.875-1.875zM9.75 17.25a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25zm3.75-1.5a.75.75 0 00-1.5 0v3.75a.75.75 0 001.5 0v-3.75zm3.75-3a.75.75 0 00-1.5 0v6.75a.75.75 0 001.5 0v-6.75z" />
                 </svg>
               </div>
-              <p>{formatDate(folder.name)}</p>
+              <p>{formatDateTime(file.name)}</p>
             </Link>
           </div>
         ))}
@@ -222,4 +199,4 @@ const ScansDashboard = () => {
   );
 };
 
-export default ScansDashboard;
+export default StackingDashboard; 
