@@ -48,12 +48,10 @@ from power import factory_power_helper
 from camera_controller import CameraController
 
 from process import process_scan, get_fits_header
-from animate import *
-from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.3.0'
+BACKEND_API_VERSION = '1.2.1'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -73,14 +71,16 @@ class Scan(ScanBase):
     pro_sharpen_level: int
     cont_sharpen_level: int
     offset: int
-    observer: str = ''
-    description: str = ''
-    advanced: str = ''
 
 class CameraControls(BaseModel):
     exp: float
     gain: float
     max_visu_threshold: int
+
+# Logging configuration (currently commented out)
+# now = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+# logfile = f'logs/{now}.log'
+# logging.basicConfig(filename=logfile, filemode='w', level=logging.DEBUG)
 
 def sys_debug():
     """
@@ -127,7 +127,7 @@ app.normalize = False
 # Determine the current camera model from system configuration
 current_dt_overlay=os.popen('grep dtoverlay=imx /boot/firmware/config.txt').read()
 print((current_dt_overlay))
-current_camera = "imx477"
+current_camera = "imx219" if "imx219" in current_dt_overlay else "imx477"
 
 # Initialize power management helper
 power = factory_power_helper()
@@ -220,42 +220,6 @@ async def paginated_scans(page: int = 1, size: int = 10):
     scans = get_paginated_scans(page, size)
     return JSONResponse(content=jsonable_encoder(scans))
 
-@app.get("/sunscan/stacked", response_class=JSONResponse)
-async def paginated_stacked_scans(page: int = 1, size: int = 10):
-    """
-    Retrieve a list of all available stacked scans.
-    
-    This endpoint returns information about all scans stored in the system.
-    It's used to provide an overview of available scan data to the user
-    or other parts of the application.
-    
-    Args:
-        request (Request): The incoming request object.
-    
-    Returns:
-        JSONResponse: A JSON array containing information about each scan.
-    """
-    scans = get_paginated_scans(page, size, get_stacked_scans)
-    return JSONResponse(content=jsonable_encoder(scans))
-
-@app.get("/sunscan/animated", response_class=JSONResponse)
-async def paginated_animated_scans(page: int = 1, size: int = 10):
-    """
-    Retrieve a list of all available animated scans.
-    
-    This endpoint returns information about all scans stored in the system.
-    It's used to provide an overview of available scan data to the user
-    or other parts of the application.
-    
-    Args:
-        request (Request): The incoming request object.
-    
-    Returns:
-        JSONResponse: A JSON array containing information about each scan.
-    """
-    scans = get_paginated_scans(page, size, get_animated_scans)
-    return JSONResponse(content=jsonable_encoder(scans))
-
 @app.get("/camera/imx477/connect", response_class=JSONResponse)
 async def connect(request: Request):
     """
@@ -270,8 +234,7 @@ async def connect(request: Request):
     Returns:
         JSONResponse: A JSON object indicating the camera's connection status.
     """
-    camera = factory_imx477_camera_csi()
-    app.cameraController = CameraController(camera)
+    app.cameraController = CameraController(IMX477Camera_CSI())
     if app.cameraController.getStatus() != "connected":
         app.cameraController.start()
     return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
@@ -539,8 +502,8 @@ async def decreaseGain(request: Request):
         JSONResponse: Updated camera settings after stopping the recording.
     """
     if app.cameraController:
-        scan_path = app.cameraController.stopRecord()
-        return JSONResponse(content={"scan": os.path.dirname(scan_path)}, status_code=200)
+        app.cameraController.stopRecord()
+        return getCameraControls()
 
 @app.get("/camera/reset-controls/", response_class=JSONResponse)
 async def resetControls(request: Request):
@@ -625,28 +588,6 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     else:
         print(f"The directory {scan.filename} does not exist.")
 
-@app.post("/sunscan/scans/delete/", response_class=JSONResponse)
-async def deleteScans(data: PostProcessRequest):
-    """
-    Delete multiple scan directories.
-    
-    This endpoint removes a specified scan directory and all its contents.
-    It's used for managing storage and removing unwanted scan data.
-    
-    Args:
-        scan (Scan): A model containing the filename of the scan to be deleted.
-        background_tasks (BackgroundTasks): FastAPI's background tasks handler.
-    
-    Returns:
-        None: This endpoint doesn't return a response directly.
-    """
-    for p in data.paths:
-        if os.path.exists(p):
-            shutil.rmtree(p)
-            print(f"The directory {p} has been deleted.")
-        else:
-            print(f"The directory {p} does not exist.")
-
 @app.get("/sunscan/snapshots/delete/all/", response_class=JSONResponse)
 async def deleteAllSnapshots(background_tasks: BackgroundTasks):
     """
@@ -701,119 +642,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
         None: The processing is done in the background, so no immediate return.
     """
     if (os.path.exists(scan.filename)):
-        print(scan)
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer, advanced=scan.advanced)
-
-
-@app.post("/sunscan/process/stack/")
-def process_stack(request: PostProcessRequest):
-    required_files = {"clahe": False, "protus": False, "cont": False, "color":False, "helium":False, "helium_cont":False}
-    for required_file, status in required_files.items():
-        matching_paths = []
-        for path_str in request.paths:
-            path = Path(os.path.join(os.path.dirname(path_str) , "sunscan_"+required_file+".png"))
-            if path.exists():
-                matching_paths.append(path)
-        if len(matching_paths) == len(request.paths):
-            required_files[required_file] = True
-    start_time = time.perf_counter()
-    stack(request.paths, required_files, request.observer)
-    end_time = time.perf_counter()
-    print(f" {end_time - start_time:.6f} secondes") 
-    
-     
-@app.post("/sunscan/process/animate/")
-def process_animate(request: PostProcessRequest):
-    # Supported filenames and output GIF names
-
-    gif_names = {
-        "sunscan_clahe.png": "animated_clahe.gif",
-        "sunscan_helium.png": "animated_helium.gif",
-        "sunscan_helium_cont.png": "animated_helium_cont.gif",
-        "sunscan_protus.png": "animated_protus.gif",
-        "sunscan_cont.png": "animated_cont.gif",
-    }
-
-    gifs_created = []
-
-    stacking_dir = './storage/animations'
-    if not os.path.exists(stacking_dir):
-        os.mkdir(stacking_dir)
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    work_dir = os.path.join(stacking_dir, timestamp)
-    if not os.path.exists(work_dir):
-        os.mkdir(work_dir)
-
-    # Check for each required file type and generate GIFs if possible
-    for required_file in gif_names.keys():
-        matching_paths = []
-
-        for path_str in request.paths:
-            path = Path(os.path.dirname(path_str)) / required_file
-            print(path)
-
-            if path.exists() or os.path.exists(path):
-                matching_paths.append(path)
-
-        print(matching_paths)
-        # Create GIF if all paths contain the required file
-        if len(matching_paths) == len(request.paths):
-            output_gif_path = os.path.join(work_dir, gif_names[required_file])
-            create_gif(matching_paths, request.watermark, request.observer, output_gif_path, request.frame_duration, request.display_datetime, request.resize_gif, request.bidirectional, request.add_average_frame)
-            gifs_created.append(str(output_gif_path))
-
-    if not gifs_created:
-        raise HTTPException(status_code=400, detail="No GIFs were created. Ensure the required files exist.")
-
-    return {"message": "GIFs created successfully", "gifs": gifs_created}
-
-class FileTagRequest(BaseModel):
-    filename: str
-    tag: str
-
-@app.post("/sunscan/scan/tag/")
-async def create_tag_file(request: FileTagRequest):
-    directory = request.filename
-    tag = request.tag
-
-
-    # Check if the directory exists
-    if not os.path.exists(directory):
-        raise HTTPException(status_code=400, detail="The specified directory does not exist.")
-
-    # Remove all files starting with tag_ in the directory
-    for file in os.listdir(directory):
-        if file.startswith("tag_"):
-            try:
-                os.remove(os.path.join(directory, file))
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error removing file {file}: {str(e)}")
-
-    # Construct the full path for the tag_<tag> file
-    tag_filename = os.path.join(directory, f"tag_{tag}")
-
-    try:
-        # Write an empty file with the name tag_<tag>
-        with open(tag_filename, "w") as f:
-            f.write("")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating the file: {str(e)}")
-
-    return {"message": f"File '{tag_filename}' created successfully."}
-
-
-def calculate_fwhm(y):
-    x = np.arange(len(y))
-    max_value = np.max(y)
-    half_max = max_value / 2.0
-    indices = np.where(y >= half_max)[0]
-    if len(indices) < 2:
-        return None
-    left_idx = indices[0]
-    right_idx = indices[-1]
-    fwhm = x[right_idx] - x[left_idx]
-    return fwhm
+        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -848,6 +677,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 if len(frame):
                     r = frame / 256
                     if not app.cameraController.isRecording():
+                        # Resize image for streaming
+                        scale_percent = 90 if app.cameraController.isInColorMode() else 70
+                        width = int(frame.shape[1] * scale_percent / 100)
+                        height = int(frame.shape[0] * scale_percent / 100)
+     
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
                             d = time.strftime("%Y_%m_%d")
@@ -862,21 +696,16 @@ async def websocket_endpoint(websocket: WebSocket):
                             app.snapShotCount += 1
                             app.takeSnapShot = False
                             app.snapshot_header = None
-
-                        # Resize image for streaming
-                        scale_percent = 90 if app.cameraController.isInColorMode() else 70
-                        width = int(frame.shape[1] * scale_percent / 100)
-                        height = int(frame.shape[0] * scale_percent / 100)
-                        r = cv2.resize(r, (width, height))
                     
                         # Get and send ADU values
                         max_adu = app.cameraController.getMaxADU()
+                        r = cv2.resize(r, (width, height))
                         await websocket.send_text('adu;#;'+str(max_adu[0])+';#;'+str(max_adu[1])+';#;'+str(max_adu[2])) 
 
                         # Send intensity and spectrum data for cropped images
                         if app.cameraController.cameraIsCropped() and not app.cameraController.isInColorMode():
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
-                            await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
+                            await websocket.send_text('spectrum;#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
                     # Apply normalization if enabled
                     if app.cameraController.normalizeMode()==1:    
@@ -884,12 +713,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         max_threshold = app.cameraController.getMaxVisuThreshold()
                         r = (r * 256) / max_threshold
+        
+
                     
                     # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()
                     file_64encoded = str(base64.b64encode(byte_im)  ).split('b\'')
                     bytes_to_sent = (file_64encoded[1])[:-1]
-
                     await websocket.send_text('camera;#;0;#;0;#;data:image/jpg;base64,'+bytes_to_sent )
                    
             # Adjust sleep time based on recording status
