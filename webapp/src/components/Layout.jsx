@@ -52,7 +52,7 @@ const Layout = ({ children, title, backLink, subtitle }) => {
         <footer className="stats-footer">
           <div className="stats-container">
             <div className="stat-item">
-              <span>Storage: {stats.storage.used} / {stats.storage.total} (Free: {stats.storage.free})</span>
+              <span>Storage: {stats.used} / {stats.total} (Free: {stats.free})</span>
             </div>
             <div className="stat-item">
               <span>Camera: {stats.camera}</span>
