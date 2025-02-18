@@ -159,6 +159,7 @@ def get_scans(path='storage/scans/', withDetails=False):
                     'helium_cont': 'Helium + Continuum',
                     'helium': 'Helium',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
+                    'protus_doppler':'Artificial eclipse : Clahe + Unsharp mask',
                     'cont':'Continuum : Clahe + Unsharp mask',
                     'doppler':'Doppler',
                     'color': 'Artificial color',

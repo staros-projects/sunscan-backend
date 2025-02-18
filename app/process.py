@@ -317,7 +317,6 @@ def create_protus_image(wd, raw, level, header, observer, name=None):
     frame_contrasted3 = np.array(img_seuil, dtype='uint16')
     frame_contrasted3 = cv2.flip(frame_contrasted3, 0)  # Flip image vertically
 
-
     # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
     clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
     cl1 = clahe.apply(frame_contrasted3)
@@ -328,8 +327,6 @@ def create_protus_image(wd, raw, level, header, observer, name=None):
     cc = (cl1 - Seuil_bas) * (65000 / (Seuil_haut - Seuil_bas))  # Apply contrast
     cc[cc < 0] = 0  # Remove negative values
     cc = np.array(cc, dtype='uint16')
-
-    cc = sharpenImage(cc, level)  # Sharpen the image
 
     # Save as PNG and JPG
     if name:
@@ -353,13 +350,13 @@ def create_doppler_image(wd, frames, header, observer):
         try :
             img_doppler=np.zeros([frames[1].shape[0], frames[1].shape[1], 3],dtype='uint16')
 
-            f1=np.array(frames[1], dtype="float64")
-            f2=np.array(frames[2], dtype="float64")
+            f1=np.array(frames[2], dtype="float64")
+            f2=np.array(frames[1], dtype="float64")
             moy=np.array(((f1+f2)/2), dtype='uint16')
              
             i2,Seuil_haut, Seuil_bas=seuil_image(moy)
-            i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
-            i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
+            i1=seuil_image_force (frames[2],Seuil_haut, Seuil_bas)
+            i3=seuil_image_force(frames[1],Seuil_haut, Seuil_bas)
             
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
@@ -371,9 +368,9 @@ def create_doppler_image(wd, frames, header, observer):
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
 
             print('create_protus_image eclipse doppler')
-            i1 = create_protus_image(wd, f1, 0, header, observer)
+            i1 = create_protus_image(wd, f2, 0, header, observer)
             i2 = create_protus_image(wd, moy, 0, header, observer)
-            i3 = create_protus_image(wd, f2, 0, header, observer)
+            i3 = create_protus_image(wd, f1, 0, header, observer)
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
