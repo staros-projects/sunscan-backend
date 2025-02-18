@@ -1,11 +1,9 @@
 import os
 import psutil
 import time
-import re
 import json
 from pathlib import Path
-from typing import Callable
-from config import LineDict
+
 
 def get_directory_size(path='storage'):
     """
@@ -73,97 +71,27 @@ def get_single_scan(path):
     print(base)
     return get_scans(base, True)[0]
 
-def get_scan_tag(path):
-    tag = ''
-    tag_files = [f for f in os.listdir(path) if f.startswith('tag_')]
-    if tag_files:
-        tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_' 
-        if tag_value in LineDict:
-            tag = LineDict[tag_value]
-    return tag
+def get_paginated_scans(page: int = 1, size: int = 20):
+    all_files = get_scans()
+    total_files = len(all_files)
+    
+    start = (page - 1) * size
+    end = start + size
 
-def get_stacked_scans(path='storage/stacking/', withDetails=False):
+    if start >= total_files:
+        return {"total":total_files, "scans":[]}
 
-    # Create the directory if it doesn't exist
-    if not os.path.exists(path):
-        os.mkdir(path)
-        
-    scans = []
-    regex = r"stacked_(helium|helium_cont|clahe|cont|protus)_(\d)_(raw|sharpen).png"
-    for root, dirs, files in os.walk(path, topdown=False):
-        stacking_dirname = None
-        images = []
-        for name in files:
-            if "stacked" in name:
-                dir_name = root.split('/')[-1]
-                if dir_name:
-                    file_path = os.path.join(root, name)
-                    stacking_dirname = os.path.dirname(file_path)
-                    cti = int(os.path.getmtime(stacking_dirname))
+    paginated_files = all_files[start:end]
 
-                    if "stacked_clahe" in file_path:
-                        images.append(file_path)
-                    elif "stacked_cont" in file_path:
-                        images.append(file_path)
-                    elif "stacked_protus" in file_path:
-                        images.append(file_path)
-                    match = re.match(regex, name)
-                    if match:
-                        stacked_img_count = match.group(2)
-        if len(dirs) ==0 and stacking_dirname:                    
-            scans.append({'path':stacking_dirname, 'stacked_img_count':stacked_img_count, 'images':images, 'creation_date':cti})
-    scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
-    return scans  
-
-def get_animated_scans(path='storage/animations/', withDetails=False):
-
-    # Create the directory if it doesn't exist
-    if not os.path.exists(path):
-        os.mkdir(path)
-
-    scans = []
-
-    for root, dirs, files in os.walk(path, topdown=False):
-        stacking_dirname = None
-        images = []
-        for name in files:
-            if "animated" in name:
-                dir_name = root.split('/')[-1]
-                if dir_name:
-                    file_path = os.path.join(root, name)
-                    stacking_dirname = os.path.dirname(file_path)
-                    cti = int(os.path.getmtime(stacking_dirname))
-
-                    if "helium" in file_path:
-                        images.append(file_path)
-                    elif "clahe" in file_path:
-                        images.append(file_path)
-                    elif "cont" in file_path:
-                        images.append(file_path)
-                    elif "protus" in file_path:
-                        images.append(file_path)
-
-        if len(dirs) ==0 and stacking_dirname:                    
-            scans.append({'path':stacking_dirname, 'images':images, 'creation_date':cti})
-    scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
-    return scans  
+    return {"total":total_files, "scans":paginated_files}
 
 def get_scans(path='storage/scans/', withDetails=False):
-
-    # Create the directory if it doesn't exist
-    if not os.path.exists(path):
-        os.mkdir(path)
-        
     scans = []
     images_type = {'clahe':'Clahe + Unsharp mask',
-                    'helium_cont': 'Helium + Continuum',
-                    'helium': 'Helium',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
-                    'protus_doppler':'Artificial eclipse : Clahe + Unsharp mask',
                     'cont':'Continuum : Clahe + Unsharp mask',
                     'doppler':'Doppler',
-                    'color': 'Artificial color',
-                    'clahe_colour':'Clahe + Unsharp mask + Artificial color',
+                    'clahe_colour':'Clahe + Unsharp mask + colour',
                     'raw':  'Raw'}
 
     for root, dirs, files in os.walk(path, topdown=False):
@@ -188,17 +116,10 @@ def get_scans(path='storage/scans/', withDetails=False):
 
     scans_with_status = []
     for s in scans:   
-        if os.path.exists(os.path.join(s['path'],'sunscan_preview.jpg')):
+        if os.path.exists(os.path.join(s['path'],'sunscan_clahe.jpg')):
             s['status'] = 'completed'
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'
-
-        # Check for tag_ file and set s['tag'] accordingly
-        s['tag'] = ''
-        tag_files = [f for f in os.listdir(s['path']) if f.startswith('tag_')]
-        if tag_files:
-            tag_value = tag_files[0].split('_', 1)[-1]  # Extract tag value after 'tag_'
-            s['tag'] = tag_value
 
         try:
             with open(os.path.join(s['path'], 'sunscan_conf.txt')) as d:
@@ -209,19 +130,6 @@ def get_scans(path='storage/scans/', withDetails=False):
         scans_with_status.append(s)
     return scans_with_status  
     
-def get_paginated_scans(page: int = 1, size: int = 20, get_scan_fct: Callable = get_scans):
-    all_files = get_scan_fct()
-    total_files = len(all_files)
-    
-    start = (page - 1) * size
-    end = start + size
-
-    if start >= total_files:
-        return {"total":total_files, "scans":[]}
-
-    paginated_files = all_files[start:end]
-
-    return {"total":total_files, "scans":paginated_files}
 
 def sizeof_fmt(num, suffix="b"):
     """
@@ -257,4 +165,4 @@ def get_available_size(path="/"):
 if __name__ == '__main__':
     print(get_available_size())
     print(get_directory_size())
-    print(get_animated_scans())
+    print(get_scans())
