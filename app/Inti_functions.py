@@ -445,7 +445,7 @@ def detect_edge (myimg,zexcl, crop, disp_log):
     
 
     # releve seuil moyenne pour eviter clamp trop fort
-    img_mean=3*np.mean(myimg[1:-1,milieu-rayon-50:milieu+rayon+50]) #facteur 1.3 pour eviter des artefacts de bords
+    img_mean=1.3*np.mean(myimg[1:-1,milieu-rayon+50:milieu+rayon-50]) #facteur 1.3 pour eviter des artefacts de bords
     img_c=np.copy(myimg)
     img_c[img_c>img_mean]=img_mean
  
