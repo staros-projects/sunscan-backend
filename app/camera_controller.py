@@ -279,9 +279,9 @@ class CameraController:
         Initialize a new SER file for recording frames.
         """
 
-        # Generate timestamp and date strings for file naming
-        timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
-        date = time.strftime("%Y_%m_%d")
+        # Generate timestamp and date strings for file naming in UTC
+        timestr = time.strftime("%Y_%m_%d-%H_%M_%S", time.gmtime())
+        date = time.strftime("%Y_%m_%d", time.gmtime())
         
         # Create filename with prefix and timestamp
         filename = f"{self._filename_prefix}_{timestr}"
