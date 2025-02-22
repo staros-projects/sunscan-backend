@@ -147,6 +147,29 @@ def getCameraControls():
         content = jsonable_encoder(app.cameraController.getCameraControls())
         return JSONResponse(content=content) 
 
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str, response: Response):
+    """
+    Handles CORS preflight requests.
+
+    When a browser makes a cross-origin request, it may first send an OPTIONS 
+    request (a "preflight" request) to check which HTTP methods and headers are 
+    allowed. This function responds to such requests by setting appropriate CORS 
+    headers, allowing the client to proceed with the actual request.
+
+    Parameters:
+    - full_path (str): The requested path (not used directly in this function).
+    - response (Response): The HTTP response object.
+
+    Returns:
+    - Response: A response with CORS headers allowing cross-origin requests.
+    """
+    response.headers["Access-Control-Allow-Origin"] = "*"  # Allows requests from any origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"  # Permits specified HTTP methods
+    response.headers["Access-Control-Allow-Headers"] = "*"  # Allows all headers
+    return response
+
+
 @app.post("/update")
 async def update(file: UploadFile = File(...)):
     """
