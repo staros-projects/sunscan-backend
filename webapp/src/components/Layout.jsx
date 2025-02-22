@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import logo from '../assets/staros_logo.svg';
+import logo from '../assets/sunscan_logo.png';
 import { getSunscanStats } from '../api';
 
 // structure de base de la gallery
