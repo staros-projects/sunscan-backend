@@ -147,6 +147,29 @@ def getCameraControls():
         content = jsonable_encoder(app.cameraController.getCameraControls())
         return JSONResponse(content=content) 
 
+@app.options("/{full_path:path}")
+async def preflight_handler(full_path: str, response: Response):
+    """
+    Handles CORS preflight requests.
+
+    When a browser makes a cross-origin request, it may first send an OPTIONS 
+    request (a "preflight" request) to check which HTTP methods and headers are 
+    allowed. This function responds to such requests by setting appropriate CORS 
+    headers, allowing the client to proceed with the actual request.
+
+    Parameters:
+    - full_path (str): The requested path (not used directly in this function).
+    - response (Response): The HTTP response object.
+
+    Returns:
+    - Response: A response with CORS headers allowing cross-origin requests.
+    """
+    response.headers["Access-Control-Allow-Origin"] = "*"  # Allows requests from any origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"  # Permits specified HTTP methods
+    response.headers["Access-Control-Allow-Headers"] = "*"  # Allows all headers
+    return response
+
+
 @app.post("/update")
 async def update(file: UploadFile = File(...)):
     """
@@ -1406,11 +1429,12 @@ async def delete_scans(folders: List[str] = Query(...)):
     for folder in absolute_folders:
         if not os.path.exists(folder):
             raise HTTPException(status_code=404, detail="Folder not found")
-        if not os.listdir(folder):
-            raise HTTPException(status_code=404, detail="Folder is empty")
+        #if not os.listdir(folder):
+        #    raise HTTPException(status_code=404, detail="Folder is empty")
         # Verify the folder is within SCANS_DIR
         if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
+
         shutil.rmtree(folder)
 
     return {"message": "Folders deleted successfully"}
