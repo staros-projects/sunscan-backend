@@ -1429,11 +1429,12 @@ async def delete_scans(folders: List[str] = Query(...)):
     for folder in absolute_folders:
         if not os.path.exists(folder):
             raise HTTPException(status_code=404, detail="Folder not found")
-        if not os.listdir(folder):
-            raise HTTPException(status_code=404, detail="Folder is empty")
+        #if not os.listdir(folder):
+        #    raise HTTPException(status_code=404, detail="Folder is empty")
         # Verify the folder is within SCANS_DIR
         if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
+
         shutil.rmtree(folder)
 
     return {"message": "Folders deleted successfully"}
