@@ -529,7 +529,7 @@ def get_fits_header(exp, gain):
     hdr['BIN2']=1
     hdr['EXPTIME']=int(exp/1000)
     hdr['GAIN']=gain
-    hdr['DATE-OBS']=datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f7%z')
+    hdr['DATE-OBS']=datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f7%z')
     hdr['OBSERVER']='SUNSCAN'
     hdr['INSTRUME']='SUNSCAN'
     hdr['TELESCOP']='SUNSCAN'
