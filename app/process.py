@@ -461,19 +461,30 @@ def Colorise_Image(color, frame_contrasted, wd, header, observer):
     if not color:
         return
     
+    print(color)
+    
     rules = {
-        'halpha':       { 'b':3.87, 'g':1.35, 'r':0.60, 'thresholds':68, 'gamma':1.2 },
-        'caIIH':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8   },
-        'caIIK':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8  },
-        'hbeta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
-        'hgamma':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
-        'hdelta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
-        'hepsilon':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':68, 'gamma':1.0  },
-        'mgI1':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
-        'mgI2':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
-        'mgI3':      { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':0, 'gamma':1.0  },
-        'heI':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':0, 'gamma':1.0  },
-        'sodium':      { 'b':0.00, 'g':2.80, 'r':2.20, 'thresholds':0, 'gamma':1.0  },
+        # orange/red
+        'halpha':       { 'b':3.87, 'g':1.35, 'r':0.60, 'thresholds':55, 'gamma':1.2 }, 
+
+        # purple
+        'caIIH':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8   }, 
+        'caIIK':     { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':35, 'gamma':1.8  }, 
+        'hepsilon':   { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':40, 'gamma':1.8  }, 
+        'hgamma':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':45, 'gamma':1.8  },
+        'hdelta':    { 'b':0.80, 'g':1.50, 'r':1.50, 'thresholds':50, 'gamma':1.8  },
+
+        # blue
+        'hbeta':    { 'b':0.90, 'g':1.30, 'r':1.80, 'thresholds':50, 'gamma':1.8  },
+       
+        # green
+        'mgI1':      { 'b':1.3, 'g':.5, 'r':1.3, 'thresholds':55, 'gamma':1.0  },
+        'mgI2':      { 'b':1.3, 'g':.5, 'r':1.3, 'thresholds':55, 'gamma':1.0  },
+        'mgI3':      { 'b':1.3, 'g':.5, 'r':1.3, 'thresholds':55, 'gamma':1.0  },
+
+        # yellow
+        'heI':      { 'b':0.0, 'g':2.8, 'r':2.2, 'thresholds':10, 'gamma':1.8  }, 
+        'sodium':   { 'b':0.0, 'g':2.8, 'r':2.2, 'thresholds':10, 'gamma':1.8  }, 
     }
 
     img_color = None
@@ -530,4 +541,8 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-14_54_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
+    #he I
+    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-15_07_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
+    # halpha
+    #process_scan("D:\sunscan\sample_data\storage\scans\\2024_11_13\\sunscan-2024_09_21-16_21_59\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
+    
