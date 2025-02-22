@@ -278,10 +278,10 @@ class CameraController:
         """
         Initialize a new SER file for recording frames.
         """
-
         # Generate timestamp and date strings for file naming in UTC
-        timestr = time.strftime("%Y_%m_%d-%H_%M_%S", time.gmtime())
-        date = time.strftime("%Y_%m_%d", time.gmtime())
+        now = datetime.now(timezone.utc)
+        timestr = now.strftime("%Y_%m_%d-%H_%M_%S")
+        date = now.strftime("%Y_%m_%d")
         
         # Create filename with prefix and timestamp
         filename = f"{self._filename_prefix}_{timestr}"
@@ -321,9 +321,9 @@ class CameraController:
         serfile_object.setTelescope('sunscan')
        
         # date et date UTC
-        now = get_custom_ts(datetime.now(timezone.utc))
-        serfile_object.setDateTime(now)
-        serfile_object.setDateTimeUTC(now)
+        custom_ser_ts = get_custom_ts(now)
+        serfile_object.setDateTime(custom_ser_ts)
+        serfile_object.setDateTimeUTC(custom_ser_ts)
         
         # Store the Serfile object
         self._serfile_object = serfile_object
