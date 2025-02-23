@@ -691,12 +691,12 @@ async def deleteAllSnapshots(background_tasks: BackgroundTasks):
         print(f"The directory {dirToClean} does not exist.")
 
 
-@app.post("/sunscan/shutdown", response_class=JSONResponse)
+@app.post("/sunscan/shutdown/", response_class=JSONResponse)
 async def shutdownSUNSCAN():
     os.system("sudo shutdown -h now")
     return JSONResponse(content={"message": "Shutdown ok"}, status_code=200)
 
-@app.post("/sunscan/reboot", response_class=JSONResponse)
+@app.post("/sunscan/reboot/", response_class=JSONResponse)
 async def rebootSUNSCAN():
     os.system("sudo shutdown -r now")
     return JSONResponse(content={"message": "Reboot ok"}, status_code=200)
