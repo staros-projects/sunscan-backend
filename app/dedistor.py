@@ -210,6 +210,7 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
     i = 1
     tag = ''
     acquisition_dates = []
+    print('conf:',patch_size, step_size, intensity_threshold)
     for p in paths:
         print('Stack #'+str(i))
         dirname = os.path.dirname(p)
@@ -278,7 +279,7 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
         
 def apply_watermark_if_enable(frame, text, observer):
     print('watermark', observer)
-    if not observer:
+    if observer == ' ':
         return frame
     # Ensure the frame is in uint8 format
     if frame.dtype != np.uint8:

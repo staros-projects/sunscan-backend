@@ -224,7 +224,7 @@ def create_surface_image(wd, frames, helium, level, header, observer, color):
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
     print('watermark', observer, desc)
-    if not observer:
+    if observer == ' ':
         return frame
     # Ensure the frame is in uint8 format
     if frame.dtype != np.uint8:
