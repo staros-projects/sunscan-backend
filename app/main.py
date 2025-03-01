@@ -53,6 +53,8 @@ from dedistor import *
  
 from pydantic import BaseModel
 
+from wifi import WifiManager, WifiCountryCode
+
 BACKEND_API_VERSION = '1.3.0'
 
 class SetTimeProp(BaseModel):
@@ -701,6 +703,34 @@ async def rebootSUNSCAN():
     os.system("sudo shutdown -r now")
     return JSONResponse(content={"message": "Reboot ok"}, status_code=200)
 
+
+@app.get("/wifi/country", response_class=JSONResponse)
+async def getWifiCoutryCode():
+    country_code = WifiManager().get_country()
+    if country_code is None:
+        raise HTTPException(status_code=500, detail="Could not retrieve country code")
+    return JSONResponse(content={"country": country_code}, status_code=200)
+
+class WifiCountryCodeParameters(BaseModel):
+    """
+    Model for set wifi country code.
+    """
+    country: WifiCountryCode
+
+@app.post("/wifi/country", response_class=JSONResponse)
+async def setWifiCoutryCode(params: WifiCountryCodeParameters):
+    """
+    Set the WiFi regulatory domain country code.
+    """
+    country_code = params.country
+    WifiManager().set_country(country_code)
+    
+    return JSONResponse(content={"country": country_code}, status_code=200)
+    
+@app.post("/wifi/reset", response_class=JSONResponse)
+async def resetWifiCoutryCode():
+    WifiManager().restart_wifi()
+    return JSONResponse(content={"message": "Wifi restarted"}, status_code=200)
 
 @app.post("/sunscan/scan", response_class=JSONResponse)
 async def getScanDetails(scan:ScanBase, request: Request):
