@@ -1067,7 +1067,7 @@ async def download_multiple_images_in_stacking(stacking_folder: str, files: List
         if not os.path.commonpath([file, STACKING_DIR]) == STACKING_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
 
-    zip_file_name = f'stacking_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    zip_file_name = f'stacking_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     zip_path = os.path.join(STACKING_DIR, zip_file_name)
 
     zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1096,7 +1096,7 @@ async def download_folders_in_stacking(folders: List[str] = Query(...)):
         # Verify the folder is within SCANS_DIR
         if not os.path.commonpath([folder, STACKING_DIR]) == STACKING_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
-        zip_file_name = f'{os.path.basename(folder)}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        zip_file_name = f'{os.path.basename(folder)}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
         zip_path = os.path.join(STACKING_DIR, zip_file_name)
 
         zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1108,7 +1108,7 @@ async def download_folders_in_stacking(folders: List[str] = Query(...)):
         zip_files.append(zip_file_name)
 
     # create a global zip file with each zip files in the list zip_files
-    global_zip_file_name = f'stacking_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    global_zip_file_name = f'stacking_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     global_zip_path = os.path.join(STACKING_DIR, global_zip_file_name)
 
     zipf = zipfile.ZipFile(global_zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1187,7 +1187,7 @@ async def download_multiple_images_in_animations(animation_folder: str, files: L
         if not os.path.commonpath([file, ANIMATIONS_DIR]) == ANIMATIONS_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
 
-    zip_file_name = f'animations_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    zip_file_name = f'animations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     zip_path = os.path.join(ANIMATIONS_DIR, zip_file_name)
 
     zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1231,7 +1231,7 @@ async def download_folders_in_animations(folders: List[str] = Query(...)):
         # Verify the folder is within SCANS_DIR
         if not os.path.commonpath([folder, ANIMATIONS_DIR]) == ANIMATIONS_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
-        zip_file_name = f'{os.path.basename(folder)}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        zip_file_name = f'{os.path.basename(folder)}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
         zip_path = os.path.join(ANIMATIONS_DIR, zip_file_name)
 
         zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1243,7 +1243,7 @@ async def download_folders_in_animations(folders: List[str] = Query(...)):
         zip_files.append(zip_file_name)
 
     # create a global zip file with each zip files in the list zip_files
-    global_zip_file_name = f'animations_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    global_zip_file_name = f'animations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     global_zip_path = os.path.join(ANIMATIONS_DIR, global_zip_file_name)
 
     zipf = zipfile.ZipFile(global_zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1319,7 +1319,7 @@ async def download_multiple_scans(folders: List[str] = Query(...)):
         if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
 
-    zip_file_name = f'scans_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    zip_file_name = f'scans_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     zip_path = os.path.join(SCANS_DIR, zip_file_name)
 
     zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1397,7 +1397,7 @@ async def download_multiple_scans(date_folder: str, folders: List[str] = Query(.
         if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
             raise HTTPException(status_code=400, detail="Invalid folder path")
 
-    zip_file_name = f'scans_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    zip_file_name = f'scans_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     zip_path = os.path.join(SCANS_DIR, zip_file_name)
 
     zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
@@ -1428,7 +1428,7 @@ async def download_multiple_images(date_folder: str, scan_folder: str, images: L
         if not os.path.commonpath([image, SCANS_DIR]) == SCANS_DIR:
             raise HTTPException(status_code=400, detail="Invalid image path")
 
-    zip_file_name = f'images_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    zip_file_name = f'images_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
     zip_path = os.path.join(SCANS_DIR, zip_file_name)
 
     zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
