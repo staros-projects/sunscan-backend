@@ -5,7 +5,13 @@ git
 i2c-tools
 jq
 libatlas-base-dev
-libcamera-dev
+libcamera-apps
+libcamera-ipa
+libcamera-tools
+pipewire-libcamera
+libcamera0.1
+libcamera0.2
+libcamera0.3
 libcap-dev
 libi2c-dev
 netcat-traditional

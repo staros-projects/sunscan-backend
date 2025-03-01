@@ -48,7 +48,7 @@ jobs:
           # Compression level to be used. From 0 to 9 (refer to the tool man page for more
           # information on this. Usually 0 is no compression but very fast, up to 9 with the
           # best compression but very slow).
-          compression-level: 6
+          compression-level: 9
 
           # Enable SSH access to Pi.
           enable-ssh: 1
@@ -95,7 +95,7 @@ jobs:
           locale: en_US.UTF-8
 
           # Password of the intial user account, locked if empty.
-          password: 'sunscan'
+          password: 'password'
 
           # Path where selected pi-gen ref will be checked out to. If the path does not yet
           # exist, it will be created (including its parents).
