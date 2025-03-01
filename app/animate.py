@@ -33,7 +33,7 @@ def extract_datetime_from_path(image_path: str) -> str:
     sunscan, year, month, day = date_part.split('_')
     hour, minute, second = time_part.split('_')
     # Return the formatted datetime: YYYY/MM/DD HH:MM:SS
-    return f"{year}/{month}/{day} {hour}:{minute}:{second}"
+    return f"{year}/{month}/{day} {hour}:{minute}:{second} UT"
 
 
 def add_datetime_to_frame(image: Image.Image, datetime_str: str) -> Image.Image:

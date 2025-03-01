@@ -236,7 +236,7 @@ def apply_watermark_if_enable(frame, header, observer, desc=''):
             # Convert to datetime object using strptime
             datetime_obj = datetime.strptime(header['DATE-OBS'][:23], '%Y-%m-%dT%H:%M:%S.%f')
             # Convert to desired format (YYYY-MM-DD HH:MM:SS)
-            formatted_date = datetime_obj.strftime('%Y-%m-%d %H:%M:%S')
+            formatted_date = datetime_obj.strftime('%Y-%m-%d %H:%M:%S')+' UT'
         except Exception as e:
             print(e)
 

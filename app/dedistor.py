@@ -263,7 +263,7 @@ def stack(paths, status, observer):
     if not os.path.exists(work_dir):
         os.mkdir(work_dir)
 
-    watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime
+    watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime+' UT'
     watermark_txt_t = watermark_txt
     if tag:
         watermark_txt_t += ' - '+ tag
