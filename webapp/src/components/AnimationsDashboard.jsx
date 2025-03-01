@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getAnimationFolders, downloadAnimationFile, downloadMultipleAnimationFolders, deleteAnimationFolders } from '../api';
 import Layout from './Layout';
-import { devLog } from '../config';
+import { devLog, config } from '../config';
 import './Dashboard.css';
 
 const AnimationsDashboard = () => {
@@ -182,10 +182,10 @@ const AnimationsDashboard = () => {
                 }
               }}
             >
-              <div className="folder-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
-                </svg>
+              <div className="folder-link">
+                 <img src={`${config.API_URL}/storage/animations/${file.name}/animated_preview.gif`}
+                                className="image-thumbnail" /> 
+                     
               </div>
               <p>{formatDateTime(file.name)}</p>
             </Link>
