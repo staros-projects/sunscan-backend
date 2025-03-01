@@ -21,6 +21,7 @@ import time
 import shutil
 import zipfile
 import datetime
+import subprocess
 from typing import List
 from hashlib import md5
 from fastapi.encoders import jsonable_encoder
@@ -388,11 +389,23 @@ async def setTime(props: SetTimeProp, request: Request):
     Returns:
         dict: Confirmation message with the set time and timezone.
     """
+
+    
+    # Log current timezone and time
+    current_timezone = subprocess.getoutput("timedatectl show --property=Timezone --value")
+    current_time = subprocess.getoutput("date")
+    print(f"Current Timezone: {current_timezone}, Current Time: {current_time}")
+    
+    # Update time and timezone
     os.system("sudo date -s '"+str(time.ctime(int(props.unixtime)))+"'")
     os.system(f"sudo timedatectl set-timezone {props.timezone}")  # Update the system timezone
     
+    # Log updated timezone and time
+    updated_timezone = subprocess.getoutput("timedatectl show --property=Timezone --value")
+    updated_time = subprocess.getoutput("date")
+    print(f"Updated Timezone: {updated_timezone}, Updated Time: {updated_time}")
+    
     return {"message": "Time and timezone set successfully", "unixtime": props.unixtime, "timezone": props.timezone}
-
 
 @app.post("/camera/controls/", response_class=JSONResponse)
 async def updateCameraControls(controls:CameraControls, request: Request):
