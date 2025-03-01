@@ -57,7 +57,7 @@ BACKEND_API_VERSION = '1.3.0'
 
 class SetTimeProp(BaseModel):
     unixtime: str
-
+    timezone: str
 
 class ScanBase(BaseModel):
     filename: str
@@ -374,22 +374,25 @@ async def increaseExpTime(request: Request):
         app.cameraController.setCropVerticalPosition('down')
         return getCameraControls()
     
-@app.post("/sunscan/set-time/", response_class=JSONResponse)
-async def setTime(props:SetTimeProp, request: Request):
+@app.post("/sunscan/set-time/", response_class=JSONResponse) 
+async def setTime(props: SetTimeProp, request: Request):
     """
-    Set the system time.
+    Set the system time and timezone.
     
-    This endpoint allows for setting the system time. It's crucial for
-    ensuring accurate timestamps on scans and other time-sensitive operations.
+    This endpoint allows for setting the system time and updating the timezone on the Raspberry Pi 4.
     
     Args:
-        props (SetTimeProp): A model containing the new time as a Unix timestamp.
+        props (SetTimeProp): A model containing the new time as a Unix timestamp and timezone.
         request (Request): The incoming request object.
     
     Returns:
-        None: This endpoint doesn't return a response directly.
+        dict: Confirmation message with the set time and timezone.
     """
     os.system("sudo date -s '"+str(time.ctime(int(props.unixtime)))+"'")
+    os.system(f"sudo timedatectl set-timezone {props.timezone}")  # Update the system timezone
+    
+    return {"message": "Time and timezone set successfully", "unixtime": props.unixtime, "timezone": props.timezone}
+
 
 @app.post("/camera/controls/", response_class=JSONResponse)
 async def updateCameraControls(controls:CameraControls, request: Request):
