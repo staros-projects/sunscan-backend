@@ -192,7 +192,7 @@ def correct_image_png(input_name, dx_map, dy_map):
     return corrected_image
 
 
-def stack(paths, status, observer):
+def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
     if not status['clahe'] and not status['helium']:
         return 
 
@@ -229,7 +229,7 @@ def stack(paths, status, observer):
         # step_size : pas de cross-corr�lation (en X et Y)
         # intensity_threshold : seuil d'intensit� en dessous duquel la corr�lation n'est pas calcul�
         deformed_name = os.path.join(os.path.dirname(p) ,clahe_basefilename)
-        dx_map, dy_map, amplitude_map = find_distorsion(deformed_root,deformed_name, patch_size=32, step_size=10, intensity_threshold=0)
+        dx_map, dy_map, amplitude_map = find_distorsion(deformed_root,deformed_name, patch_size, step_size, intensity_threshold)
             
         # Correction des distorsions dans la s�quence principale (format PNG en entr�e)
         corrected_image = correct_image_png(deformed_name, dx_map, dy_map)

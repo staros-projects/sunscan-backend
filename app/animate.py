@@ -20,6 +20,9 @@ class PostProcessRequest(BaseModel):
     resize_gif: bool = True  # Whether to resize GIF to 50% of original size
     bidirectional: bool = False  # Whether to play animation in both directions
     add_average_frame: bool = False  # Whether to calculate and add average frames between frames
+    patch_size: int = 32 
+    step_size: int = 10 
+    intensity_threshold: int = 0
 
 def extract_datetime_from_path(image_path: str) -> str:
     """

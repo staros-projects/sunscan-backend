@@ -740,7 +740,7 @@ def process_stack(request: PostProcessRequest):
         if len(matching_paths) == len(request.paths):
             required_files[required_file] = True
     start_time = time.perf_counter()
-    stack(request.paths, required_files, request.observer)
+    stack(request.paths, required_files, request.observer, request.patch_size, request.step_size, request.intensity_threshold)
     end_time = time.perf_counter()
     print(f" {end_time - start_time:.6f} secondes") 
     
