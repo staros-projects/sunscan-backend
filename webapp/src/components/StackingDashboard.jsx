@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getStackingFolders, downloadStackingFile, downloadMultipleStackingFolders, deleteStackingFolders } from '../api';
 import Layout from './Layout';
-import { devLog } from '../config';
+import { devLog, config } from '../config';
 import './Dashboard.css';
 
 const StackingDashboard = () => {
@@ -185,10 +185,9 @@ const StackingDashboard = () => {
                 }
               }}
             >
-              <div className="folder-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path fillRule="evenodd" d="M5.625 1.5H9a3.75 3.75 0 013.75 3.75v1.875c0 1.036.84 1.875 1.875 1.875H16.5a3.75 3.75 0 013.75 3.75v7.875c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 01-1.875-1.875V3.375c0-1.036.84-1.875 1.875-1.875zM9.75 17.25a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25zm3.75-1.5a.75.75 0 00-1.5 0v3.75a.75.75 0 001.5 0v-3.75zm3.75-3a.75.75 0 00-1.5 0v6.75a.75.75 0 001.5 0v-6.75z" />
-                </svg>
+              <div className="folder-link">
+              <img src={`${config.API_URL}/storage/stacking/${file.name}/stacked_clahe_preview.jpg`}
+                className="image-thumbnail" /> 
               </div>
               <p>{formatDateTime(file.name)}</p>
             </Link>
