@@ -913,7 +913,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         await websocket.send_text('adu;#;'+str(max_adu[0])+';#;'+str(max_adu[1])+';#;'+str(max_adu[2])) 
 
                         # Send intensity and spectrum data for cropped images
-                        if app.cameraController.cameraIsCropped() and not app.cameraController.isInColorMode():
+                        if len(frame) == 2 and app.cameraController.cameraIsCropped() :
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
