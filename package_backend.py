@@ -21,6 +21,7 @@ if __name__ == "__main__":
     zip_filename = 'sunscan_backend_source.zip' 
     include_dirs = [
         './app',
+        './app/fonts',
         './webapp/dist',
         './webapp/dist/assets'
     ]
