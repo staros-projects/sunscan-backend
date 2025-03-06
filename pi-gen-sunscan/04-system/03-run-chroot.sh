@@ -61,6 +61,8 @@ chmod +x /var/www/sunscan-backend/reset_hotspot.sh
 cat << EOF > /usr/local/bin/configure_hotspot.sh
 #!/bin/bash
 
+
+
 CONNECTION_DIR="/etc/NetworkManager/system-connections/"
 HOTSPOT_FILE=\$(grep -rl "ssid=sunscan-" \$CONNECTION_DIR)
 

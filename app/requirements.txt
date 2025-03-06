@@ -15,5 +15,7 @@ jinja2==3.1.4
 python-multipart==0.0.12
 opencv-python~=4.7.0.72
 pydantic~=2.5.3
+pydantic_extra_types~=2.10.2
+pycountry~=24.6.1
 imageio==2.34.0
 aiortc==1.9.0 
