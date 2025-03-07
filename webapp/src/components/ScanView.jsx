@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getImagesInScan, downloadScan } from '../api';
+import { getImagesInScan, downloadImage, downloadMultipleScanImages, deleteScanImages, getScanLog } from '../api';
 import Layout from './Layout';
+import { config, devLog } from '../config';
 
-// Fonction pour détecter les types d'images (par extension)
+//  types d'images
 export const groupFilesByType = (files) => {
   const groups = {};
 
@@ -28,6 +29,16 @@ export const groupFilesByType = (files) => {
 const ScanView = () => {
   const { dateFolder, scanFolder } = useParams();
   const [files, setFiles] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState('');
+  const [imageSize, setImageSize] = useState('normal'); // 'tiny', 'small', 'normal', 'large', 'huge'
+  const [showLogPopup, setShowLogPopup] = useState(false);
+  const [logContent, setLogContent] = useState('');
+  const [isLoadingLog, setIsLoadingLog] = useState(false);
 
   useEffect(() => {
     getImagesInScan(dateFolder, scanFolder).then(setFiles);
@@ -73,41 +84,287 @@ const ScanView = () => {
   }
 };
 
+const handleSelectFile = (file) => {
+  setSelectedFiles(prev => {
+    if (prev.includes(file.name)) {
+      return prev.filter(name => name !== file.name);
+    }
+    return [...prev, file.name];
+  });
+};
+
+const handleSelectAll = () => {
+  if (selectedFiles.length === files.length) {
+    setSelectedFiles([]);
+  } else {
+    setSelectedFiles(files.map(file => file.name));
+  }
+};
+
+const downloadSelected = async () => {
+  if (selectedFiles.length === 0) return;
+  
+  setIsLoading(true);
+  setDownloadStatus('Preparing download...');
+  
+  try {
+    if (selectedFiles.length === 1) {
+      await downloadImage(dateFolder, scanFolder, selectedFiles[0]);
+    } else {
+      await downloadMultipleScanImages(dateFolder, scanFolder, selectedFiles);
+    }
+    
+    setDownloadStatus('Download started!');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (error) {
+    console.error('Error downloading files:', error);
+    setDownloadStatus('Download failed. Please try again.');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } finally {
+    setIsLoading(false);
+    setDownloadStatus('');
+  }
+};
+
+const downloadAll = async () => {
+  if (files.length === 0) return;
+  
+  setIsLoading(true);
+  setDownloadStatus('Preparing download...');
+  
+  try {
+    await downloadMultipleScanImages(dateFolder, scanFolder, files.map(file => file.name));
+    setDownloadStatus('Download started!');
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (error) {
+    console.error('Error downloading all files:', error);
+    setDownloadStatus('Download failed. Please try again.');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } finally {
+    setIsLoading(false);
+    setDownloadStatus('');
+  }
+};
+
+const handleDelete = async () => {
+  if (selectedFiles.length === 0) return;
+  setShowDeleteConfirm(true);
+};
+
+const confirmDelete = async () => {
+  setShowDeleteConfirm(false);
+  setIsDeleting(true);
+  setDeleteStatus('Deleting files...');
+
+  try {
+    await deleteScanImages(dateFolder, scanFolder, selectedFiles);
+    setDeleteStatus('Files deleted successfully!');
+    
+    // Rafraîchir la liste des fichiers
+    const updatedFiles = await getImagesInScan(dateFolder, scanFolder);
+    setFiles(updatedFiles);
+    
+    // Réinitialiser la sélection
+    setSelectedFiles([]);
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } catch (error) {
+    console.error('Error deleting files:', error);
+    setDeleteStatus('Failed to delete files. Please try again.');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } finally {
+    setIsDeleting(false);
+    setDeleteStatus('');
+  }
+};
+
+const handleSizeChange = (direction) => {
+  const sizes = ['tiny', 'small', 'normal', 'large', 'huge'];
+  const currentIndex = sizes.indexOf(imageSize);
+  
+  let newIndex;
+  if (direction === 'decrease') {
+    newIndex = Math.max(0, currentIndex - 1);
+  } else {
+    newIndex = Math.min(sizes.length - 1, currentIndex + 1);
+  }
+  
+  const newSize = sizes[newIndex];
+  setImageSize(newSize);
+  localStorage.setItem('scanViewImageSize', newSize);
+};
+
+//  Charge la préférence de taille au démarrage
+useEffect(() => {
+  const savedSize = localStorage.getItem('scanViewImageSize');
+  if (savedSize) {
+    setImageSize(savedSize);
+  }
+}, []);
+
+const handleShowLog = async () => {
+  setIsLoadingLog(true);
+  try {
+    const content = await getScanLog(dateFolder, scanFolder);
+    setLogContent(content);
+    setShowLogPopup(true);
+  } catch (error) {
+    console.error('Error loading scan log:', error);
+    setLogContent('Error loading scan log');
+  } finally {
+    setIsLoadingLog(false);
+  }
+};
 
 const groupedFiles = groupFilesByType(files);
-
+const scanDate = (dateFolder.split('-')[0]).replaceAll("_", "/");
+const scanTime = (scanFolder.split('-')[1]).replaceAll("_", ":");;
 
 
   return (
-    <Layout title={`Scan: ${scanFolder}`} backLink={`/date/${dateFolder}`}>
-      <button onClick={() => downloadScan(dateFolder, scanFolder)} className="download-button">
-        Download Scan
-      </button>
-      <div className="file-grid">
-      {Object.entries(groupedFiles).map(([type, groupFiles]) => (
-        <div key={type} className="file-group">
-          <h3>{type.toUpperCase()} Files</h3>
-          {groupFiles.map(file => (
-            <Link
-              to={`/date/${dateFolder}/scan/${scanFolder}/image/${file.name}`}
-              key={file.name}
-              className="file-item"
-            >
-              <div className="file-thumbnail">
-                {isImage(file.name) ? (
-                  <img
-                    src={`http://sunscan.local:8000/images/${dateFolder}/${scanFolder}/${file.name}`}
-                    alt={file.name}
-                  />
-                ) : (
-                  getFileIcon(file.name)
-                )}
-              </div>
-              <p>{file.name}</p>
-            </Link>
-          ))}
+    <Layout title={`Scan`} subtitle={`Date: ${scanDate} - Time: ${scanTime}`} backLink={`/date/${dateFolder}`}>
+      {(isLoading && downloadStatus) || (isDeleting && deleteStatus) ? (
+        <div className="waiting-popup">
+          <div className="waiting-message">
+            <div className="loading-spinner"></div>
+            <p>{downloadStatus || deleteStatus}</p>
+          </div>
         </div>
-      ))}
+      ) : null}
+
+      {showDeleteConfirm && (
+        <div className="confirm-popup">
+          <div className="confirm-message">
+            <h3>Confirm Deletion</h3>
+            <p>Are you sure you want to delete {selectedFiles.length} file(s)?</p>
+            <p className="warning">This action cannot be undone!</p>
+            <div className="confirm-actions">
+              <button 
+                onClick={() => setShowDeleteConfirm(false)}
+                className="action-button"
+              >
+                Cancel
+              </button>
+              {/* Disable delete button for now -> Mobile App needs all images or none, not partial ?
+              <button 
+                onClick={confirmDelete}
+                className="action-button delete-button"
+              >
+                Delete
+              </button>*/} 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogPopup && (
+        <div className="log-popup">
+          <div className="log-content">
+            <div className="log-header">
+              <h3>Scan Log</h3>
+              <button onClick={() => setShowLogPopup(false)} className="close-button">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path fillRule="evenodd" d="M5.47 5.47a.75.75 0 011.06 0L12 10.94l5.47-5.47a.75.75 0 111.06 1.06L13.06 12l5.47 5.47a.75.75 0 11-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 01-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 010-1.06z" />
+                </svg>
+              </button>
+            </div>
+            <pre className="log-text">
+              {isLoadingLog ? 'Loading...' : logContent}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      <div className="dashboard-actions">
+        <button 
+          onClick={downloadSelected} 
+          disabled={selectedFiles.length === 0 || isLoading}
+          className="action-button"
+        >
+          Download Selected ({selectedFiles.length})
+        </button>
+        <button 
+          onClick={downloadAll}
+          disabled={isLoading}
+          className="action-button"
+        >
+          Download All ({files.length})
+        </button>
+        <button 
+          onClick={handleSelectAll}
+          className="action-button"
+        >
+          {selectedFiles.length === files.length ? 'Unselect All' : 'Select All'}
+        </button>
+        <button 
+          onClick={handleDelete}
+          disabled={selectedFiles.length === 0 || isLoading || isDeleting}
+          className="action-button delete-button"
+        >
+          Delete Selected ({selectedFiles.length})
+        </button>
+        <button
+          onClick={handleShowLog}
+          disabled={isLoadingLog}
+          className="action-button log-button"
+        >
+          {isLoadingLog ? 'Loading Log...' : 'Scan Log'}
+        </button>
+        <div className="size-controls">
+          <button 
+            className="size-button"
+            onClick={() => handleSizeChange('decrease')}
+            title="Decrease size"
+            disabled={imageSize === 'tiny'}
+          >
+            -
+          </button>
+          <button 
+            className="size-button"
+            onClick={() => handleSizeChange('increase')}
+            title="Increase size"
+            disabled={imageSize === 'huge'}
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div className={`file-grid size-${imageSize}`}>
+        {Object.entries(groupedFiles).map(([type, groupFiles]) => (
+          <div key={type} className="file-group">
+            <h3>{type.toUpperCase()} Files</h3>
+            <div className={`folder-grid size-${imageSize}`}>
+              {groupFiles.map(file => (
+                <div key={file.name} className="file-item">
+                  <div className="file-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedFiles.includes(file.name)}
+                      onChange={() => handleSelectFile(file)}
+                    />
+                  </div>
+                  <Link
+                    to={`/date/${dateFolder}/scan/${scanFolder}/image/${file.name}`}
+                    className="file-link"
+                  >
+                    <div className="file-thumbnail">
+                      {isImage(file.name) ? (
+                        <img
+                          src={`${config.IMAGES_BASE_URL}/${dateFolder}/${scanFolder}/${file.name}`}
+                          alt={file.name}
+                        />
+                      ) : (
+                        getFileIcon(file.name)
+                      )}
+                    </div>
+                    <p>{file.name}</p>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </Layout>
   );

@@ -48,7 +48,6 @@ class CameraController:
         
         self._serfile_object = None
         self._normalize = 1
-        self._flat_enabled = False
         self._max_visu_threshold = 256
 
     def _init(self):
@@ -58,7 +57,7 @@ class CameraController:
         self._sensor_size = self._camera.init()
         self._crop_height = 280
         self._crop_y = int((self._sensor_size[1] / 2) - (self._crop_height / 2))
-        self._preview_crop_height = 1600
+        self._preview_crop_height = 2000 
         self._preview_crop_y = int((self._sensor_size[1] / 2) - (self._preview_crop_height / 2))
         
     def _thread_func(self):  
@@ -67,7 +66,7 @@ class CameraController:
         """
         print('Thread camera is running...')
         while(self._running):
-            self._frame = self._camera.capture(self._record, self._flat_enabled)  # Capture a frame from the camera
+            self._frame = self._camera.capture(self._record)  # Capture a frame from the camera
             if not self.isInColorMode():  # Check if the camera is not in color mode
                 if self._record:  # Check if recording is active
                     if not self._serfile_object:  # If SER file object doesn't exist
@@ -112,13 +111,6 @@ class CameraController:
         self._monobin = not self._monobin
         self._camera.updateCameraControls(self.getCameraControls())
 
-    def toggleFlat(self):
-        """
-        Toggle flat field correction.
-        """
-        self._flat_enabled = not self._flat_enabled
-        self._camera.updateCameraControls(self.getCameraControls())
-
     def toggleBin(self):
         """
         Toggle binning mode.
@@ -140,14 +132,6 @@ class CameraController:
         :return: Boolean indicating binning mode status
         """
         return self._bin
-
-    def isFlatEnable(self):
-        """
-        Check if flat field correction is enabled.
-
-        :return: Boolean indicating flat field correction status
-        """
-        return self._flat_enabled
 
     def getStatus(self):
         """
@@ -174,7 +158,6 @@ class CameraController:
         self._thread.join()
         self._camera_status = 'disconnected'
         self._camera.stop()
-        self._cropped_flat = []
 
     def getLastFrame(self):
         """
@@ -289,15 +272,16 @@ class CameraController:
         self._record = False
         print(self._fc,self._time_in_progress,self._t0)
         print(f"frame count : {self._fc} time:{self._time_in_progress-self._t0} fps:{self._fc/(self._time_in_progress-self._t0)}")
+        return self._final_ser_filename
 
     def _initSerFile(self):
         """
         Initialize a new SER file for recording frames.
         """
-
-        # Generate timestamp and date strings for file naming
-        timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
-        date = time.strftime("%Y_%m_%d")
+        # Generate timestamp and date strings for file naming in UTC
+        now = datetime.now(timezone.utc)
+        timestr = now.strftime("%Y_%m_%d-%H_%M_%S")
+        date = now.strftime("%Y_%m_%d")
         
         # Create filename with prefix and timestamp
         filename = f"{self._filename_prefix}_{timestr}"
@@ -337,9 +321,9 @@ class CameraController:
         serfile_object.setTelescope('sunscan')
        
         # date et date UTC
-        now = get_custom_ts(datetime.now(timezone.utc))
-        serfile_object.setDateTime(now)
-        serfile_object.setDateTimeUTC(now)
+        custom_ser_ts = get_custom_ts(now)
+        serfile_object.setDateTime(custom_ser_ts)
+        serfile_object.setDateTimeUTC(custom_ser_ts)
         
         # Store the Serfile object
         self._serfile_object = serfile_object

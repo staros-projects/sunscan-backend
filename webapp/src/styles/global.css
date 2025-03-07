@@ -156,7 +156,7 @@ body {
 .file-icon {
   width: 64px;
   height: 64px;
-  color: #3f51b5; /* set icon color here */
+  color: #3f51b5; 
 }
 
 .file-item p {
