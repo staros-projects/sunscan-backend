@@ -54,7 +54,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.3.0'
+BACKEND_API_VERSION = '1.3.2'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -912,8 +912,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         max_adu = app.cameraController.getMaxADU()
                         await websocket.send_text('adu;#;'+str(max_adu[0])+';#;'+str(max_adu[1])+';#;'+str(max_adu[2])) 
 
-                        # Send intensity and spectrum data for cropped images
-                        if len(frame) == 2 and app.cameraController.cameraIsCropped() :
+                        # Send intensity and spectrum data for cropped imagess
+                        if len(frame.shape) == 2 and app.cameraController.cameraIsCropped() :
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
                     
