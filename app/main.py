@@ -54,7 +54,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.3.2'
+BACKEND_API_VERSION = '1.3.3'
 
 class SetTimeProp(BaseModel):
     unixtime: str
