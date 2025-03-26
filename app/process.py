@@ -102,11 +102,11 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
-            create_protus_image(WorkDir, cv2.flip(raw,0), proSharpLevel, header, observer, 'sunscan_protus')
+            create_protus_image(WorkDir, cv2.flip(raw,0), cercle,proSharpLevel, header, observer, 'sunscan_protus')
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
             if dopcont:
-                create_doppler_image(WorkDir, frames, header, observer)
+                create_doppler_image(WorkDir, frames, cercle, header, observer)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -296,7 +296,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, raw, level, header, observer, name=None):
+def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
     """
     Create and save a prominence (protus) image of the sun.
     """
@@ -305,6 +305,12 @@ def create_protus_image(wd, raw, level, header, observer, name=None):
 
     print(name)
     # Create the circular mask
+    disk_limit_percent=0.002
+    wi=int(cercle[2])
+    he=int(cercle[3])
+    r=(min(wi,he))
+    r=int(r- round(r*disk_limit_percent))-1
+    
     mask = create_circular_mask((height, width), center, 409, 3)
 
     # Blend the images
@@ -335,7 +341,7 @@ def create_protus_image(wd, raw, level, header, observer, name=None):
     else:
         return cc
 
-def create_doppler_image(wd, frames, header, observer):
+def create_doppler_image(wd, frames, cercle, header, observer):
     """
     Create and save a Doppler image of the sun.
 
@@ -368,9 +374,9 @@ def create_doppler_image(wd, frames, header, observer):
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
 
             print('create_protus_image eclipse doppler')
-            i1 = create_protus_image(wd, f2, 0, header, observer)
-            i2 = create_protus_image(wd, moy, 0, header, observer)
-            i3 = create_protus_image(wd, f1, 0, header, observer)
+            i1 = create_protus_image(wd, f2, cercle, 0, header, observer)
+            i2 = create_protus_image(wd, moy, cercle,0, header, observer)
+            i3 = create_protus_image(wd, f1, cercle, 0, header, observer)
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
