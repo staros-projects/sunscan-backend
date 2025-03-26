@@ -93,7 +93,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         header = update_header(WorkDir, header, observer)
 
         if helium:
-            result_image = process_helium(WorkDir, frames, header, observer, apply_watermark_if_enable, Colorise_Image)
+            result_image = process_helium(WorkDir, frames, cercle, header, observer, apply_watermark_if_enable, Colorise_Image)
 
  
         else:
@@ -301,17 +301,20 @@ def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
     Create and save a prominence (protus) image of the sun.
     """
     height, width = raw.shape
-    center = (width // 2, height // 2)
+    
 
     print(name)
+    x0=cercle[0]
+    y0=cercle[1]
+    center = (x0, y0)
     # Create the circular mask
     disk_limit_percent=0.002
     wi=int(cercle[2])
     he=int(cercle[3])
     r=(min(wi,he))
-    r=int(r- round(r*disk_limit_percent))-1
+    r=int(r- round(r*disk_limit_percent))-4
     
-    mask = create_circular_mask((height, width), center, 409, 3)
+    mask = create_circular_mask((height, width), center, r, 3)
 
     # Blend the images
     blended_image = blend_images(raw, np.zeros(raw.shape), mask)
@@ -548,7 +551,7 @@ def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
     #he I
-    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-15_07_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
+    process_scan("E:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-15_07_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='heI',observer=' ')
     # halpha
-    #process_scan("D:\sunscan\sample_data\storage\scans\\2024_11_13\\sunscan-2024_09_21-16_21_59\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
+    #process_scan("E:\sunscan\sample_data\storage\scans\\2024_11_13\\sunscan_2024_10_11-13_33_17\\scan.ser", mock_callback, True, True, 1100, False, advanced='', observer=' ')
     
