@@ -359,13 +359,13 @@ def create_doppler_image(wd, frames, cercle, header, observer):
         try :
             img_doppler=np.zeros([frames[1].shape[0], frames[1].shape[1], 3],dtype='uint16')
 
-            f1=np.array(frames[2], dtype="float64")
-            f2=np.array(frames[1], dtype="float64")
+            f1=np.array(frames[1], dtype="float64")
+            f2=np.array(frames[2], dtype="float64")
             moy=np.array(((f1+f2)/2), dtype='uint16')
              
             i2,Seuil_haut, Seuil_bas=seuil_image(moy)
-            i1=seuil_image_force (frames[2],Seuil_haut, Seuil_bas)
-            i3=seuil_image_force(frames[1],Seuil_haut, Seuil_bas)
+            i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
+            i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
             
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green

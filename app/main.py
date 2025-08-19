@@ -447,6 +447,24 @@ async def toggleCrop(request: Request):
         app.cameraController.toggleCrop()
         return getCameraControls()
 
+@app.get("/camera/toggle-focus-assistant/", response_class=JSONResponse)
+async def toggleFocusAssistant(request: Request):
+    """
+    Toggle the camera's crop mode.
+    
+    This endpoint switches the camera's crop mode on or off. Cropping can be
+    useful for focusing on specific areas of interest in the image.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: The updated camera control settings after toggling crop mode.
+    """
+    if app.cameraController:
+        app.cameraController.toggleFocusAssistant()
+        return getCameraControls()
+
 @app.get("/camera/infos/", response_class=JSONResponse)
 async def infos(request: Request):
     """
@@ -889,6 +907,7 @@ async def websocket_endpoint(websocket: WebSocket):
     
                 if len(frame):
                     r = frame / 256
+                    edges = None
                     if not app.cameraController.isRecording():
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
@@ -921,14 +940,11 @@ async def websocket_endpoint(websocket: WebSocket):
                             await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
 
                         # Send focus analyzer data
-                        if app.cameraController.cameraIsCropped():
+                        edges = None
+                        if app.cameraController.focusAssistantIsOn() and not app.cameraController.isInColorMode():
                             # Update focus measurement
                             sharpness, pct, edges = focus_analyzer.update(frame)
-
-                            # Overlay the detected edges (green vertical lines)
-                            r = FocusAnalyzer.overlay_edges(r.copy(), edges)
-
-                            await websocket.send_text('focus;#;'+str(sharpness)+';#;'+str(pct)+';#;'+str(edges[0])+';#;'+str(edges[1]))
+                            await websocket.send_text('focus;#;'+str(sharpness/10)+';#;'+str(pct)+';#;'+str(edges[0])+';#;'+str(edges[1]))
                     
                     # Apply normalization if enabled
                     if app.cameraController.normalizeMode()==1:    
@@ -936,6 +952,19 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         max_threshold = app.cameraController.getMaxVisuThreshold()
                         r = (r * 256) / max_threshold
+
+                    # Rescale edges if they exist
+                    if edges:
+
+                        # Compute resize ratios
+                        scale_x = r.shape[1] / frame.shape[1]   # width ratio
+                        scale_y = r.shape[0] / frame.shape[0]   # height ratio, usually 1D profile so can ignore
+
+                        edges_scaled = (
+                            int(edges[0] * scale_x - 10) if edges[0] is not None else None,
+                            int(edges[1] * scale_x + 10) if edges[1] is not None else None
+                        )
+                        r = FocusAnalyzer.overlay_edges(r.copy(), edges_scaled)
                     
                     # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()
