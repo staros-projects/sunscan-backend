@@ -77,7 +77,7 @@ class FocusAnalyzer:
             pct: normalized percentage [0..100]
             edges: (left, right) edge positions
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = frame
 
         if self.frame_idx % self.measure_every == 0:
             sharpness, edges, profile, grad = self.measure_focus_two_edges(gray)
