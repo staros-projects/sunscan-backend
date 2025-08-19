@@ -3,7 +3,7 @@ import cv2
 from collections import deque
 
 class FocusAnalyzer:
-    def __init__(self, measure_every=5, smooth_window=3):
+    def __init__(self, measure_every=3, smooth_window=3):
         """
         Initialize the FocusAnalyzer.
         :param measure_every: number of frames to skip before recomputing sharpness
@@ -35,9 +35,9 @@ class FocusAnalyzer:
             profile: 1D brightness profile
             grad: gradient of profile
         """
-        # Take only the top 10 and bottom 10 vertical pixels to reduce noise
-        strip_top = frame_gray[:10, :]
-        strip_bottom = frame_gray[-10:, :]
+        # Take only the top 20 and bottom 10 vertical pixels to reduce noise
+        strip_top = frame_gray[:20, :]
+        strip_bottom = frame_gray[-20:, :]
         strip = np.vstack((strip_top, strip_bottom))
 
         # Compute horizontal profile by averaging the selected rows
@@ -114,7 +114,7 @@ class FocusAnalyzer:
         self.sharpness_history.append(pct)
         sharpness_smooth = np.mean(self.sharpness_history) if self.sharpness_history else pct
 
-        return sharpness, pct, sharpness_smooth, edges
+        return sharpness_smooth, pct, edges
 
     @staticmethod
     def overlay_edges(frame, edges):
