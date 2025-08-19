@@ -1,11 +1,13 @@
 import numpy as np
 import cv2
+from collections import deque
 
 class FocusAnalyzer:
-    def __init__(self, measure_every=5):
+    def __init__(self, measure_every=5, smooth_window=3):
         """
         Initialize the FocusAnalyzer.
         :param measure_every: number of frames to skip before recomputing sharpness
+        :param smooth_window: number of values for moving average smoothing (default=3)
         """
         self.measure_every = measure_every
         self.frame_idx = 0
@@ -19,20 +21,13 @@ class FocusAnalyzer:
         self.sharp_min = None
         self.sharp_max = None
 
+        # History for moving average
+        self.sharpness_history = deque(maxlen=smooth_window)
+
     @staticmethod
     def measure_focus_two_edges(frame_gray):
         """
         Detect the two main edges of the solar disk by analyzing the intensity profile.
-
-        Steps:
-        - Extract top and bottom strips of the image to reduce noise
-        - Compute average horizontal profile
-        - Find gradient (slope of intensity)
-        - Left edge = strongest positive gradient
-        - Right edge = strongest negative gradient
-        - Sharpness = average of absolute gradients at both edges
-        - Sharpness is also normalized by the dynamic range of the profile
-
         Returns:
             sharpness_raw: average of absolute gradients (not normalized)
             sharpness_norm: normalized sharpness in [0..1]
@@ -41,9 +36,9 @@ class FocusAnalyzer:
             grad: gradient of profile
         """
         # Take only the top 10 and bottom 10 vertical pixels to reduce noise
-        strip_top = frame_gray[:10, :]        # Top 10 rows
-        strip_bottom = frame_gray[-10:, :]    # Bottom 10 rows
-        strip = np.vstack((strip_top, strip_bottom))  # Combine top and bottom strips
+        strip_top = frame_gray[:10, :]
+        strip_bottom = frame_gray[-10:, :]
+        strip = np.vstack((strip_top, strip_bottom))
 
         # Compute horizontal profile by averaging the selected rows
         profile = strip.mean(axis=0)
@@ -94,8 +89,9 @@ class FocusAnalyzer:
         - Every N frames, recompute sharpness and edges
         - Otherwise reuse previous values
         Returns:
-            sharpness: raw sharpness metric
-            pct: normalized percentage [0..100]
+            sharpness_raw: raw sharpness
+            sharpness_pct: normalized percentage [0..100]
+            sharpness_smooth: smoothed sharpness (moving average)
             edges: (left, right) edge positions
         """
         gray = frame
@@ -107,35 +103,38 @@ class FocusAnalyzer:
             self.edges_prev = edges
             self.update_sharpness_range(sharpness)
         else:
-            # Reuse last computed values
             sharpness = self.sharpness_prev
             edges = self.edges_prev
             profile = self.profile_prev
 
         self.frame_idx += 1
         pct = self.get_sharpness_pct(sharpness)
-        return sharpness, pct, edges
+
+        # Store in history and compute moving average
+        self.sharpness_history.append(pct)
+        sharpness_smooth = np.mean(self.sharpness_history) if self.sharpness_history else pct
+
+        return sharpness, pct, sharpness_smooth, edges
 
     @staticmethod
     def overlay_edges(frame, edges):
         """
-        Draw vertical edges on a grayscale 16-bit image.
+        Draw vertical dashed edges on a grayscale 16-bit image.
         Convert to 8-bit BGR before drawing so we can use color.
         """
-        # Ensure frame is uint8
         frame_u8 = frame.astype(np.uint8)
 
-        # If already grayscale, just copy
         if len(frame_u8.shape) == 2:
             frame_bgr = cv2.cvtColor(frame_u8, cv2.COLOR_GRAY2BGR)
         else:
             frame_bgr = frame_u8
 
-
-        # Draw green lines at detected edges
+        # Draw dashed green lines
         if edges[0] is not None:
-            cv2.line(frame_bgr, (edges[0], 0), (edges[0], frame_bgr.shape[0]), (0, 255, 0), 2)
+            for y in range(0, frame_bgr.shape[0], 20):
+                cv2.line(frame_bgr, (edges[0], y), (edges[0], y+10), (0, 255, 0), 2)
         if edges[1] is not None:
-            cv2.line(frame_bgr, (edges[1], 0), (edges[1], frame_bgr.shape[0]), (0, 255, 0), 2)
+            for y in range(0, frame_bgr.shape[0], 20):
+                cv2.line(frame_bgr, (edges[1], y), (edges[1], y+10), (0, 255, 0), 2)
 
         return frame_bgr
