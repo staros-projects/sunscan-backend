@@ -48,13 +48,15 @@ from camera import *
 from power import factory_power_helper
 from camera_controller import CameraController
 
+from focus_analyzer import FocusAnalyzer
+
 from process import process_scan, get_fits_header
 from animate import *
 from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.3.4'
+BACKEND_API_VERSION = '1.4.0'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -873,6 +875,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     print("Socket is running...")
     try:
+        focus_analyzer = FocusAnalyzer(measure_every=5)
         # Infinite loop to handle continuous data streaming
         while True:
             # Check for notifications in the queue
@@ -916,6 +919,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         if len(frame.shape) == 2 and app.cameraController.cameraIsCropped() :
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
+
+                        # Send focus analyzer data
+                        if app.cameraController.cameraIsCropped():
+                            # Update focus measurement
+                            sharpness, pct, edges = focus_analyzer.update(frame)
+
+                            # Overlay the detected edges (green vertical lines)
+                            r = FocusAnalyzer.overlay_edges(r.copy(), edges)
+
+                            await websocket.send_text('focus;#;'+str(sharpness)+';#;'+str(pct)+';#;'+str(edges[0])+';#;'+str(edges[1]))
                     
                     # Apply normalization if enabled
                     if app.cameraController.normalizeMode()==1:    
