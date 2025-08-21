@@ -57,8 +57,8 @@ atlas = {
     20491-17792:"Fe X - 6374.56 A",
     20491-19310:"H alpha  - 6562.82 A"}
 
-pixel_ref = 2.4 *2
-ratio_pix= 1.0
+pixel_ref = 4.8
+ratio_pix= pixel_ref / 3.1
         
 img_r=cv2.imread('sun_spectre.png',cv2.IMREAD_GRAYSCALE)
 img_r=cv2.flip(img_r, 0)

@@ -909,6 +909,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     r = frame / 256
                     edges = None
                     if not app.cameraController.isRecording():
+
+                        frame = locateLines(frame)
+                        
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
                             d = time.strftime("%Y_%m_%d")
