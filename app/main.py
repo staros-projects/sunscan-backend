@@ -946,8 +946,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         edges = None
                         if app.cameraController.focusAssistantIsOn() and not app.cameraController.isInColorMode():
                             # Update focus measurement
-                            sharpness, pct, edges = focus_analyzer.update(frame)
-                            await websocket.send_text('focus;#;'+str(sharpness/10)+';#;'+str(pct)+';#;'+str(edges[0])+';#;'+str(edges[1]))
+                            sharpness, edges = focus_analyzer.update(frame)
+                            await websocket.send_text('focus;#;'+str(sharpness)+';#;'+str(0)+';#;'+str(edges[0])+';#;'+str(edges[1]))
                     
                     # Apply normalization if enabled
                     if app.cameraController.normalizeMode()==1:    

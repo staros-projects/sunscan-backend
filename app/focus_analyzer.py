@@ -64,24 +64,6 @@ class FocusAnalyzer:
 
         return sharpness_raw, sharpness_norm, (left_idx, right_idx), profile, grad
 
-    def update_sharpness_range(self, sharpness):
-        """
-        Update min and max sharpness values for percentage normalization.
-        """
-        if self.sharp_min is None or sharpness < self.sharp_min:
-            self.sharp_min = sharpness
-        if self.sharp_max is None or sharpness > self.sharp_max:
-            self.sharp_max = sharpness
-
-    def get_sharpness_pct(self, sharpness):
-        """
-        Convert sharpness value into a normalized percentage [0..100].
-        """
-        if self.sharp_min is None or self.sharp_max is None or self.sharp_max == self.sharp_min:
-            return 0.0
-        pct = (sharpness - self.sharp_min) / (self.sharp_max - self.sharp_min)
-        return max(0.0, min(1.0, pct)) * 100
-
     def update(self, frame):
         """
         Process one frame:
@@ -98,23 +80,22 @@ class FocusAnalyzer:
 
         if self.frame_idx % self.measure_every == 0:
             sharpness, sharpness_norm, edges, profile, grad = self.measure_focus_two_edges(gray)
-            self.sharpness_prev = sharpness
+            self.sharpness_prev = sharpness_norm
             self.profile_prev = profile
             self.edges_prev = edges
-            self.update_sharpness_range(sharpness)
         else:
             sharpness = self.sharpness_prev
             edges = self.edges_prev
             profile = self.profile_prev
 
         self.frame_idx += 1
-        pct = self.get_sharpness_pct(sharpness)
+      
 
         # Store in history and compute moving average
-        self.sharpness_history.append(pct)
+        self.sharpness_history.append(sharpness)
         sharpness_smooth = np.mean(self.sharpness_history) if self.sharpness_history else pct
 
-        return sharpness_smooth, pct, edges
+        return sharpness_smooth, edges
 
     @staticmethod
     def overlay_edges(frame, edges):
