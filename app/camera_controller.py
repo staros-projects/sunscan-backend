@@ -56,7 +56,7 @@ class CameraController:
         Initialize camera settings and calculate crop parameters.
         """
         self._sensor_size = self._camera.init()
-        self._crop_height = 240
+        self._crop_height = 260
         self._crop_y = int((self._sensor_size[1] / 2) - (self._crop_height / 2))
         self._preview_crop_height = 2000 
         self._preview_crop_y = int((self._sensor_size[1] / 2) - (self._preview_crop_height / 2))

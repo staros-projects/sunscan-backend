@@ -909,8 +909,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     r = frame / 256
                     edges = None
                     if not app.cameraController.isRecording():
-
-                        frame = locateLines(frame)
+                        #if not app.cameraController.cameraIsCropped() :
+                        #    r = locateLines(r)
                         
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:

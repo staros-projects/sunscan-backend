@@ -50,7 +50,7 @@ class BaseIMX477Camera_CSI(ABC):
         self._cameraControls = None
         self._name = "IMX477"
         self._bin = False
-        self._crop_height = 240
+        self._crop_height = 260
         self._max_adu = (0,0,0)
         self._monobin_mode = 0
 

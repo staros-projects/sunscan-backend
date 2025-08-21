@@ -3,7 +3,7 @@ import cv2
 from collections import deque
 
 class FocusAnalyzer:
-    def __init__(self, measure_every=3, smooth_window=3):
+    def __init__(self, measure_every=1, smooth_window=5):
         """
         Initialize the FocusAnalyzer.
         :param measure_every: number of frames to skip before recomputing sharpness
@@ -77,23 +77,11 @@ class FocusAnalyzer:
             edges: (left, right) edge positions
         """
         gray = frame
-
-        if self.frame_idx % self.measure_every == 0:
-            sharpness, sharpness_norm, edges, profile, grad = self.measure_focus_two_edges(gray)
-            self.sharpness_prev = sharpness_norm
-            self.profile_prev = profile
-            self.edges_prev = edges
-        else:
-            sharpness = self.sharpness_prev
-            edges = self.edges_prev
-            profile = self.profile_prev
-
-        self.frame_idx += 1
+        sharpness, sharpness_norm, edges, profile, grad = self.measure_focus_two_edges(gray)
       
-
         # Store in history and compute moving average
         self.sharpness_history.append(sharpness)
-        sharpness_smooth = np.mean(self.sharpness_history) if self.sharpness_history else pct
+        sharpness_smooth = np.mean(self.sharpness_history)
 
         return sharpness_smooth, edges
 
