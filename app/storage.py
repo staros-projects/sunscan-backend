@@ -155,7 +155,7 @@ def get_scans(path='storage/scans/', withDetails=False):
         os.mkdir(path)
         
     scans = []
-    images_type = {'clahe':'Clahe + Unsharp mask',
+    images_type = { 'clahe':'Clahe + Unsharp mask',
                     'helium_cont': 'Helium + Continuum',
                     'helium': 'Helium',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
@@ -183,7 +183,7 @@ def get_scans(path='storage/scans/', withDetails=False):
                             ti_m = os.path.getmtime(path)
                             images[im] = [im_desc, os.path.exists(p), ti_m]
                                 
-                    scans.append({'path':ser_dirname, 'ser':ser_path, 'images':images, 'status':'pending', 'creation_date':cti})
+                    scans.append({'path':ser_dirname, 'ser':ser_path, 'images':images, 'status':'pending', 'creation_date':cti, 'planispheres':[]})
     scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
 
     scans_with_status = []
@@ -193,6 +193,9 @@ def get_scans(path='storage/scans/', withDetails=False):
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'
 
+        if os.path.exists(os.path.join(s['path'],'sunscan_clahe_proj.jpg')):
+            s['planispheres'].append(os.path.join(s['path'],'sunscan_clahe_proj.jpg'))
+         
         # Check for tag_ file and set s['tag'] accordingly
         s['tag'] = ''
         tag_files = [f for f in os.listdir(s['path']) if f.startswith('tag_')]

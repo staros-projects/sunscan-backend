@@ -8,6 +8,7 @@ from Inti_recon import solex_proc
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
+from mapping import create_solar_planisphere
 
 def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced=''):
     """
@@ -211,6 +212,7 @@ def create_surface_image(wd, frames, helium, level, header, observer, color):
     try:
         cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'), apply_watermark_if_enable(cc//256,header,observer))
         cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
+        create_solar_planisphere(os.path.join(wd,'sunscan_clahe.png'))
         save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
         # Create and save a smaller preview image
         ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
