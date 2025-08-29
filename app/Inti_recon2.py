@@ -22,9 +22,9 @@ from datetime import datetime
 import time
 
 
-from Inti_functions import *
+from Inti_functions2 import *
 #try :
-    #from serfilesreader.serfilesreader import Serfile
+    from serfilesreader.serfilesreader import Serfile
 #except ImportError : 
 from serfilesreader_vhd import Serfile
 
@@ -222,7 +222,7 @@ seuil=50% du max
     
 
 
-def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param,image_queue):
+def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param,image_queue=[]):
     """
     ----------------------------------------------------------------------------
     Reconstuit l'image du disque a partir de l'image moyenne des trames et 
@@ -266,7 +266,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
     flag_flipRA = Flags["FLIPRA"]
     flag_flipNS = Flags["FLIPNS"]
     auto_crop = Flags["Autocrop"]
-    flag_h20=Flags["h20percent"]
+    flag_h20=False
     # pour forcer les valeurs tilt et ratio
     flag_force = Flags["FORCE"]
     flag_corona = Flags['Couronne']
