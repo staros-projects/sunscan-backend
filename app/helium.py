@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import os
 import cv2
+from mapping import create_solar_planisphere
 
 def seuil_image_force (img, Seuil_haut, Seuil_bas):
     img[img>Seuil_haut]=Seuil_haut
@@ -211,7 +212,7 @@ def process_helium(WorkDir, frames, cercle, header, observer, watermark_fct, Col
     result_image = result_image.astype(np.uint16)
 
     res = process_and_save_images(cc, result_image, cercle, WorkDir, 'sunscan_helium', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
-
+    create_solar_planisphere(os.path.join(WorkDir,'sunscan_helium.png'))
 
 
     coef = 0.6
@@ -223,7 +224,7 @@ def process_helium(WorkDir, frames, cercle, header, observer, watermark_fct, Col
 
     res = process_and_save_images(cc, result_image, cercle, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
     Colorise_Image('heI', res, WorkDir, header, observer)
-    
+    create_solar_planisphere(os.path.join(WorkDir,'sunscan_helium_cont.png'))
     coef = 0.6
     result_image = image1 + coef * image2_transformed
     result_image = np.clip(result_image, 0, 65535).astype(np.uint16)
@@ -239,6 +240,7 @@ def process_helium(WorkDir, frames, cercle, header, observer, watermark_fct, Col
     cont_image = watermark_fct(moy//256, header, observer, 'Continuum')
     cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.png'),moy)
     cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.jpg'),cont_image)
+    create_solar_planisphere(os.path.join(WorkDir,'sunscan_cont.png'))
     
     # Create and save a smaller preview image
     ccsmall = cv2.resize(res/256,  (0,0), fx=0.4, fy=0.4) 

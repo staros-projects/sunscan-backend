@@ -70,7 +70,7 @@ def create_solar_planisphere(filename, debug=False):
 
     # Save output
     base, ext = os.path.splitext(filename)
-    outname = f"{base}_proj{ext}"
+    outname = f"{base}_proj.jpg"
     cv2.imwrite(outname, cv2.cvtColor(planisphere, cv2.COLOR_RGB2BGR))
     print(f"Planisphere saved as: {outname}")
 

@@ -295,6 +295,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         # save as png
         cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer, 'Continuum'))
         cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
+        create_solar_planisphere(os.path.join(wd,'sunscan_cont.png'))
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
@@ -377,6 +378,7 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             # sauvegarde en png 
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
+            create_solar_planisphere(os.path.join(wd,'sunscan_doppler.png'))
 
             print('create_protus_image eclipse doppler')
             i1 = create_protus_image(wd, f2, cercle, 0, header, observer)
@@ -522,6 +524,7 @@ def Colorise_Image(color, frame_contrasted, wd, header, observer):
             img_color=im
         
         cv2.imwrite(os.path.join(wd,'sunscan_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        create_solar_planisphere(os.path.join(wd,'sunscan_color.jpg'))
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)

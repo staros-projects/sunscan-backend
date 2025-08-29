@@ -193,8 +193,11 @@ def get_scans(path='storage/scans/', withDetails=False):
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'
 
-        if os.path.exists(os.path.join(s['path'],'sunscan_clahe_proj.jpg')):
-            s['planispheres'].append(os.path.join(s['path'],'sunscan_clahe_proj.jpg'))
+        for suffix in ["clahe", "color", "doppler", "cont", "helium_cont", "helium"]:
+            fname = f"sunscan_{suffix}_proj.jpg"
+            fpath = os.path.join(s["path"], fname)
+            if os.path.exists(fpath):
+                s["planispheres"].append(fpath)
          
         # Check for tag_ file and set s['tag'] accordingly
         s['tag'] = ''
