@@ -527,9 +527,9 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
     myimg=np.reshape(myimg, (ih, iw))   # Forme tableau X,Y de l'image moyenne
     
     # sauve en fits l'image moyenne avec suffixe _mean
-    savefich="Complements"+os.path.sep+basefich+'_mean'              
+    savefich=basefich+'_mean'              
     SaveHdu=fits.PrimaryHDU(myimg,header=hdr)
-    SaveHdu.writeto(savefich+'.fits',overwrite=True)
+    SaveHdu.writeto(os.path.join(WorkDir,savefich+'.fits'),overwrite=True)
     
     if flag_weak :
         if not flag_corona :
@@ -1017,7 +1017,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
             img_suff.append("_dp"+dp_str)
         else:
             img_suff.append('')
-            DiskHDU.writeto("Complements"+os.path.sep+basefich+img_suff[i]+'_raw.fits',overwrite='True')
+            DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[i]+'_raw.fits'),overwrite='True')
 
     if flag_display and image_queue == None:
         cv2.destroyAllWindows()
@@ -1128,12 +1128,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
         a=[0]*(y1+marge)
         b=[0]*(ih-y2+marge)
         hcol=np.concatenate((a,hcol,b))
-        
-        if debug :
-            # affichage debug
-            plt.plot(hcol1)
-            plt.plot(hcol)
-            plt.show()
+    
         
 
         # creation du tableau d'indice des lignes a corriger
@@ -1261,7 +1256,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
             plt.show()
             # test sauve image apres correction pour debug
             DiskHDU=fits.PrimaryHDU(img,header=hdr)
-            DiskHDU.writeto(basefich+img_suff[k]+'_line.fits',overwrite='True')
+            DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[k]+'_line.fits'),overwrite='True')
     
         
         """
@@ -1438,7 +1433,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
                     # sauvegarde de l'image deflattée
                     #DiskHDU=fits.PrimaryHDU(frame,header=hdu.header)
                     DiskHDU=fits.PrimaryHDU(frame,header=hdr)
-                    DiskHDU.writeto(basefich+img_suff[k]+'_flat.fits',overwrite='True')
+                    DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[k]+'_flat.fits'),overwrite='True')
                 
             else:
                 # pas de correction de flat on reprend l'image
@@ -1593,7 +1588,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
             # sauvegarde en fits de l'image tilt
             img2=np.array(img2, dtype='uint16')
             DiskHDU=fits.PrimaryHDU(img2,header=hdr)
-            DiskHDU.writeto(basefich+img_suff[k]+'_tilt.fits', overwrite='True')
+            DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[k]+'_tilt.fits'), overwrite='True')
         
         
         t5=time.time()
@@ -1937,7 +1932,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
         if flag_weak != True and flag_pol != True and data_entete[6] !='Manual':
             DiskHDU.writeto("BASS2000"+os.path.sep+hdr['FILENAME'], overwrite='True')
      
-        with  open(basefich+'_log.txt', "w") as logfile:
+        with  open(os.path.join(WorkDir,basefich+'_log.txt'), "w") as logfile:
             logfile.writelines(mylog)
         
         # sauve profile en dat

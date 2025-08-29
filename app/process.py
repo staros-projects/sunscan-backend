@@ -5,6 +5,7 @@ import datetime
 import numpy as np
 from astropy.io import fits
 from Inti_recon import solex_proc 
+from Inti_recon2 import solex_proc2
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
@@ -89,7 +90,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
 
     try:
         # Process the SER file using solex_proc function
-        frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
+        frames, header, cercle, range_dec, geom, polynome = solex_proc2(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
         
         header = update_header(WorkDir, header, observer)
 
