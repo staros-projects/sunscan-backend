@@ -258,7 +258,7 @@ def get_available_size(path="/"):
         dict: A dictionary containing total, used, and free disk space in formatted strings.
     """
     du = psutil.disk_usage(path)
-    return {"total":sizeof_fmt(du.total),"used":sizeof_fmt(du.used),"free":sizeof_fmt(du.free)}
+    return {"total":sizeof_fmt(du.total),"used":sizeof_fmt(du.used),"free_raw":du.free,"free":sizeof_fmt(du.free)}
 
 if __name__ == '__main__':
     print(get_available_size())
