@@ -79,7 +79,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     data_entete= ['', '', 0.0, 0.0, '', 0, 'Manual']
     ang_P=0.0
     solar_dict={}
-    param=[0,0,autocrop_size,autocrop_size]
+    param=[0,0,autocrop_size,autocrop_size, 0,0]
 
     color = None
     tag_files = [f for f in os.listdir(WorkDir) if f.startswith('tag_')]
@@ -90,7 +90,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
 
     try:
         # Process the SER file using solex_proc function
-        frames, header, cercle, range_dec, geom, polynome = solex_proc2(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
+        frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
         
         header = update_header(WorkDir, header, observer)
 

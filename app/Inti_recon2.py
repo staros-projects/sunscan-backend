@@ -23,10 +23,10 @@ import time
 
 
 from Inti_functions2 import *
-#try :
+try :
     from serfilesreader.serfilesreader import Serfile
-#except ImportError : 
-from serfilesreader_vhd import Serfile
+except ImportError : 
+    from serfilesreader import Serfile
 
 
 """
@@ -222,7 +222,7 @@ seuil=50% du max
     
 
 
-def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param,image_queue=[]):
+def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param,image_queue=None):
     """
     ----------------------------------------------------------------------------
     Reconstuit l'image du disque a partir de l'image moyenne des trames et 
@@ -269,8 +269,8 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
     flag_h20=False
     # pour forcer les valeurs tilt et ratio
     flag_force = Flags["FORCE"]
-    flag_corona = Flags['Couronne']
-    flag_contonly = Flags['Contonly']
+    flag_corona = False #Flags['Couronne']
+    flag_contonly = False #Flags['Contonly']
     deb1=int(param[4]) # en relatif par rapport à l'apparition du disque, première trame
     deb2=int(param[5]) # en relatif par rapport à l'apparition du disque, dernière trame
 
@@ -324,8 +324,8 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
     kend=len(range_dec)
         
     #print ('nombre de traitements ',kend)
-    WorkDir=os.path.dirname(serfile)+"/"
-    os.chdir(WorkDir)
+    WorkDir=os.path.dirname(serfile)
+    
     base=os.path.basename(serfile)
     basefich='_'+os.path.splitext(base)[0]
     
@@ -431,29 +431,8 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
     hdr['PHYSPARA']= 'Intensity'
     hdr['WAVEUNIT']= -10
     filename_suffixe=data_entete[1]+'_'+ data_entete[6]+'_'+fits_dateobs.split('T')[0].replace('-','')+'_'+fits_dateobs.split('T')[1].split('.')[0].replace(':','')
-    hdr['CAMERA']  = data_entete [7] #String, Camera identification
-    # Extract bin de data_entete data_entete[8]
-    hdr['BIN1']=int(data_entete[8][0:1])
-    hdr['BIN2']=int(data_entete[8][2:3])
-    hdr['CAMPIX']  = float(data_entete [9])*1e-3 #float, pixel size of the CMOS or CCD sensor in mm
-    hdr['CREATOR'] = data_entete [10] # String, name of the software which created the file and version number
-    if data_entete[11]=='' :
-        data_entete[11]=420
-    if data_entete[12]=='':
-        data_entete[12]=72
-    hdr['FEQUIV']  = float(data_entete [11]) #float, equivalent focal length of the telescope in mm              
-    hdr['APERTURE']= float(data_entete [12]) # float, aperture of the telescope in mm                 
-    hdr['DIAPH'] = int(data_entete[21]) # integer, diametre après diaphragme
-    hdr['DN'] = data_entete[22] # string, type de filtre genre ND8, Helioscope Lacerta
-    hdr['SPECTRO'] = data_entete [13] #String, Spectrograph identification (SOLEX, SHG700...)
-    hdr['FCOL']    = float(data_entete [14]) #float, focal length of the collimator in mm (80 SOLEX, 72 SHG700)
-    hdr['FCAM']    = float(data_entete [15]) #float, focal length of the camera lens in mm (125 SOLEX, 72 SHG700)
-    hdr['GROOVES'] = int(data_entete [16]) #integer, number of grooves/mm of the grating
-    hdr['ORDER']   = int(data_entete [17]) #integer, interference order on the grating
-    hdr['SHGANGLE']   = float(data_entete [18]) #float, angle between the central incident and diffracted rays in degrees
-    hdr['SLWIDTH'] = round(float(data_entete [20])/1000, 3) #float, slit width in mm (0.010 or 0.007)
-    hdr['SLHEIGHT'] = float(data_entete [19]) #float, slit height in mm (4.5 or 6)
-    hdr['WAVEBAND'] = float(0.0) #float, peut-etre obtenu avec param d'avant par calcul
+
+   
     
     
     #debug
@@ -555,14 +534,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
         mytrame = mytrame/(nbtrame)  
         mytrame = np.array(mytrame, dtype='uint16')
         mytrame = np.reshape(mytrame, (ih, iw))   # Forme tableau X,Y de l'image moyenne
-        # mode couronne pour calcul polynome
-        if flag_corona :
-            savefich="Complements"+os.path.sep+basefich+'_mean'  
-            myimg=np.copy(mytrame)
-        else :
-            savefich="Complements"+os.path.sep+basefich+'_mean_start'              
-        SaveHdu=fits.PrimaryHDU(mytrame,header=hdr)
-        SaveHdu.writeto(savefich+'.fits',overwrite=True)
+        
     
     #gestion taille des images Ser et Disk
     # plus petit for speed up
@@ -1935,10 +1907,7 @@ def solex_proc2(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang
         with  open(os.path.join(WorkDir,basefich+'_log.txt'), "w") as logfile:
             logfile.writelines(mylog)
         
-        # sauve profile en dat
-        if k==0 :
-            
-            np.savetxt("Complements"+os.path.sep+basefich+'.dat',pro_lamb)
+     
         
         # ajoute l'image a la liste
         frames.append(frame)
