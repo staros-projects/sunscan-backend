@@ -308,7 +308,6 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
     if max_value != 0:
         sum_image = (sum_image / max_value) * 65535.0
     sum_image = sum_image.astype(np.uint16)
-    raw = sum_image
 
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
@@ -322,7 +321,7 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
     #     imageio.v2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.png'), cc, format="png")
     #     cv2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(cc//256,text,observer))
 
-    ccsmall = cv2.resize(sum_image/256,  (0,0), fx=0.4, fy=0.4)    
+    ccsmall = cv2.resize(sum_image2/256,  (0,0), fx=0.4, fy=0.4)    
     cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
 
     if type == 'clahe':
@@ -334,12 +333,10 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
         he=round(EllipseFit[2])
         cercle=[xc,yc,wi,he]  
         type = 'negative'
+        text = text.replace('stacked images', 'stacked negative images')
         n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, return_image=True)
         imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), n, format="png")
         cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
-        sum_image = sharpenImage(sum_image, 1 if scan_count<8 else 2)
-        imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
-        cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
 
 
     
