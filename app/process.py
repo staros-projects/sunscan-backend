@@ -265,7 +265,7 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
     return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
 
 
-def create_negative_surface_image(wd, cc, cercle, header, observer):
+def create_negative_surface_image(wd, cc, cercle, header, observer, filename='sunscan_negative'):
     """
     Negative surface with bright prominences and clean black sky.
     - Surface: stretched + inverted
@@ -336,10 +336,10 @@ def create_negative_surface_image(wd, cc, cercle, header, observer):
     final_image = np.clip(blended_image, 0, 65535).astype(np.uint16)
 
     # Save outputs
-    cv2.imwrite(os.path.join(wd, 'sunscan_negative.jpg'),
+    cv2.imwrite(os.path.join(wd, filename + '.jpg'),
                 apply_watermark_if_enable(final_image // 256, header, observer))
-    cv2.imwrite(os.path.join(wd, 'sunscan_negative.png'), final_image)
-    save_as_fits(os.path.join(wd, 'sunscan_negative.fits'), final_image, header)
+    cv2.imwrite(os.path.join(wd, filename + '.png'), final_image)
+    save_as_fits(os.path.join(wd, filename + '.fits'), final_image, header)
 
 def create_continuum_image(wd, frames, level, header, observer):
     """
