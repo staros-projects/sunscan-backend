@@ -100,7 +100,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
  
         else:
             # Create and save surface image
-            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color)
+            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color, cercle)
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
@@ -156,7 +156,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, helium, level, header, observer, color):
+def create_surface_image(wd, frames, helium, level, header, observer, color, cercle):
     """
     Create and save various surface images of the sun.
 
@@ -223,6 +223,8 @@ def create_surface_image(wd, frames, helium, level, header, observer, color):
         print(e)
 
     Colorise_Image(color, cc, wd, header, observer)
+
+    create_negative_surface_image(wd, cc, cercle, header, observer)
     return raw
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
@@ -261,6 +263,54 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
     width, height = image.size
     # Position the text in the bottom-left corner with some padding
     return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
+
+
+# --- NEW FUNCTION ---
+def create_negative_surface_image(wd, cc, cercle, header, observer):
+    """
+    Create a negative surface image of the Sun while keeping prominences unchanged.
+
+    Args:
+        wd (str): Working directory where the output will be saved.
+        cc (numpy.ndarray): 16-bit CLAHE surface image.
+        cercle (tuple): (x, y, width, height) of the detected solar disk.
+        header (dict): FITS header for metadata.
+        observer (str): Observer name for watermark.
+
+    Logic:
+        1. Build a circular mask covering the solar disk (with feathering).
+        2. Create a negative version of the CLAHE image (invert intensities).
+        3. Blend the negative surface with the original image using the mask,
+           so only the disk area becomes negative and the prominences remain.
+        4. Save as PNG, JPG (watermarked) and FITS.
+    """
+    height, width = cc.shape
+    feather_width = 15  # smooth edge transition
+
+    # Center of the disk
+    x0, y0 = cercle[0], cercle[1]
+    center = (x0, y0)
+
+    # Calculate disk radius with a small margin
+    disk_limit_percent = 0.002
+    wi, he = int(cercle[2]), int(cercle[3])
+    r = min(wi, he)
+    r = int(r - round(r * disk_limit_percent)) - 18
+
+    # Mask = 1 inside the disk, 0 outside (with smooth border)
+    mask = create_circular_mask((height, width), center, r, feather_width)
+
+    # Negative version of the surface
+    negative = 65535 - cc
+
+    # Blend: negative inside disk + original outside
+    blended_image = blend_images(cc, negative, mask)
+
+    # Save outputs
+    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.jpg'),
+                apply_watermark_if_enable(blended_image // 256, header, observer))
+    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.png'), blended_image)
+    save_as_fits(os.path.join(wd, 'sunscan_clahe_negative.fits'), blended_image, header)
 
 
 def create_continuum_image(wd, frames, level, header, observer):
