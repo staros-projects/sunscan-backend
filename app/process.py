@@ -458,21 +458,7 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
-
-            # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
-            create_solar_planisphere(os.path.join(wd,'sunscan_doppler.png'))
-
-            print('create_protus_image eclipse doppler')
-            i1 = create_protus_image(wd, f2, cercle, 0, header, observer)
-            i2 = create_protus_image(wd, moy, cercle,0, header, observer)
-            i3 = create_protus_image(wd, f1, cercle, 0, header, observer)
-            img_doppler[:,:,0] = i1 # blue
-            img_doppler[:,:,1] = i2 # green
-            img_doppler[:,:,2] = i3 # red
-
-        
+                    
             # BGR → HSV
             hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
             H, S, V = cv2.split(hsv)
@@ -498,6 +484,19 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             # Reconstruction
             hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
             img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+
+            # sauvegarde en png 
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
+            create_solar_planisphere(os.path.join(wd,'sunscan_doppler.png'))
+
+            print('create_protus_image eclipse doppler')
+            i1 = create_protus_image(wd, f2, cercle, 0, header, observer)
+            i2 = create_protus_image(wd, moy, cercle,0, header, observer)
+            i3 = create_protus_image(wd, f1, cercle, 0, header, observer)
+            img_doppler[:,:,0] = i1 # blue
+            img_doppler[:,:,1] = i2 # green
+            img_doppler[:,:,2] = i3 # red
 
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)
