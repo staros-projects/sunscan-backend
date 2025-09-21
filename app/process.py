@@ -454,9 +454,9 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
             i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
             
-            img_doppler[:,:,0] = i1 * 0.8  # bleu
-            img_doppler[:,:,1] = i2 * 0.3  # vert réduit
-            img_doppler[:,:,2] = i3 * 1.2  # rouge renforcé
+            img_doppler[:,:,0] = i1 # blue
+            img_doppler[:,:,1] = i2 # green
+            img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
             # sauvegarde en png 
