@@ -333,7 +333,13 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
         wi=round(EllipseFit[1]) # diametre
         he=round(EllipseFit[2])
         cercle=[xc,yc,wi,he]  
-        create_negative_surface_image(work_dir, sum_image, cercle, text, observer, 'stacked_negative_'+str(scan_count)+'_raw')
-        create_negative_surface_image(work_dir, sum_image, cercle, text, observer, 'stacked_negative_'+str(scan_count)+'_sharpen')
+        type = 'negative'
+        n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, stacking=True)
+        imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), n, format="png")
+        cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
+        sum_image = sharpenImage(sum_image, 1 if scan_count<8 else 2)
+        imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
+        cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
+
 
     
