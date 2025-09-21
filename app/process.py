@@ -314,7 +314,7 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
     surface_stretched = np.zeros_like(surface)
     if valid_s.size > 0:
         low_s = np.percentile(valid_s, 0.5)
-        high_s = np.percentile(valid_s, 99.5)
+        high_s = np.percentile(valid_s, 99.9)
         if high_s > low_s:
             scaled = (surface[surface > 0] - low_s) * (65535 / (high_s - low_s))
             surface_stretched[surface > 0] = np.clip(scaled, 0, 65535)
@@ -444,23 +444,64 @@ def create_doppler_image(wd, frames, cercle, header, observer):
     """
     if len(frames) >3:
         try :
-            img_doppler=np.zeros([frames[1].shape[0], frames[1].shape[1], 3],dtype='uint16')
+            img_doppler=np.zeros([frames[1].shape[0], frames[1].shape[1], 3],dtype='uint8')
 
             f1=np.array(frames[1], dtype="float64")
             f2=np.array(frames[2], dtype="float64")
-            moy=np.array(((f1+f2)/2), dtype='uint16')
+            moy=np.array(((f1+f2)/2), dtype='float64') 
+            # on equilibre les plans
+            lum_roi1 = get_lum_moyenne(f1) # calcul moyenne au centre sur zone de 200x200
+            lum_roi2 = get_lum_moyenne(f2)
+            lum_roimoy = get_lum_moyenne(moy)
+            ratio_l1 = lum_roimoy/lum_roi1
+            ratio_l2 = lum_roimoy/lum_roi2
+            frames[2] = np.clip(f2*ratio_l2, 0, 65535).astype( np.uint16)
+            frames[1] = np.clip(f1*ratio_l1, 0, 65535).astype( np.uint16) 
+            moy=np.array(moy, dtype='uint16')
+
+            
+            #i2,Seuil_haut, Seuil_bas=seuil_image(moy) # seuil bas = 0
+            Seuil_haut = np.percentile(moy, 99.99) # was 99.999
+            Seuil_bas=np.percentile(moy,5) # was zéra
+            i2= seuil_image_force (moy,Seuil_haut, Seuil_bas)
+            i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
+            i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
              
             i2,Seuil_haut, Seuil_bas=seuil_image(moy)
             i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
             i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
+
+            i1=np.clip(i1/256,0,255).astype(np.uint8)
+            i2=np.clip(i2/256,0,255).astype(np.uint8)
+            i3=np.clip(i3/256,0,255).astype(np.uint8)
             
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
+            # BGR → HSV
+            hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
+            H, S, V = cv2.split(hsv)
+            
+            # Correction orange → plus rouge
+            mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
+            H[mask_orange] -= 20             # décale la teinte vers le rouge
+                            
+            # Correction bleu → plus bleu
+            mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
+            H[mask_blue] += 20 
+
+            H = np.clip(H, 0, 180)
+            S = np.clip(S, 0, 255) 
+            V = np.clip(V, 0, 255) 
+            
+            # Reconstruction
+            hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
+            img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+
             # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
             create_solar_planisphere(os.path.join(wd,'sunscan_doppler.png'))
 
@@ -468,11 +509,37 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             i1 = create_protus_image(wd, f2, cercle, 0, header, observer)
             i2 = create_protus_image(wd, moy, cercle,0, header, observer)
             i3 = create_protus_image(wd, f1, cercle, 0, header, observer)
+            
+            i1=np.clip(i1/256,0,255).astype(np.uint8)
+            i2=np.clip(i2/256,0,255).astype(np.uint8)
+            i3=np.clip(i3/256,0,255).astype(np.uint8)
+            
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
+            img_doppler=cv2.flip(img_doppler,0)
 
-            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
+            # BGR → HSV
+            hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
+            H, S, V = cv2.split(hsv)
+            
+            # Correction orange → plus rouge
+            mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
+            H[mask_orange] -= 20             # décale la teinte vers le rouge
+                            
+            # Correction bleu → plus bleu
+            mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
+            H[mask_blue] += 20 
+
+            H = np.clip(H, 0, 180)
+            S = np.clip(S, 0, 255) 
+            V = np.clip(V, 0, 255) 
+            
+            # Reconstruction
+            hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
+            img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+
+            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)
             
                 
