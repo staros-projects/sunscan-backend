@@ -334,7 +334,7 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
         he=round(EllipseFit[2])
         cercle=[xc,yc,wi,he]  
         type = 'negative'
-        n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, stacking=True)
+        n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, return_image=True)
         imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), n, format="png")
         cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
         sum_image = sharpenImage(sum_image, 1 if scan_count<8 else 2)
