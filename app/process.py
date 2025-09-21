@@ -267,11 +267,13 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
 
 def create_negative_surface_image(wd, cc, cercle, header, observer):
     """
-    Create a negative surface image with brighter prominences and
-    stronger surface contrast.
+    Negative surface with bright prominences and clean black sky.
+    - Surface: stretched + inverted
+    - Prominences: stretched separately
+    - Outside sky: forced to black
     """
     height, width = cc.shape
-    feather_width = 15
+    feather_width = 10
 
     # Disk geometry
     x0, y0 = cercle[0], cercle[1]
@@ -279,37 +281,65 @@ def create_negative_surface_image(wd, cc, cercle, header, observer):
     disk_limit_percent = 0.002
     wi, he = int(cercle[2]), int(cercle[3])
     r = min(wi, he)
-    r = int(r - round(r * disk_limit_percent)) - 18
+    r = int(r - round(r * disk_limit_percent)) - 5
 
-    # --- Histogram stretch for better contrast on surface ---
-    # Tighten thresholds (e.g. 1%–99.8%)
-    low = np.percentile(cc, 1)
-    high = np.percentile(cc, 99.8)
-    stretched = np.clip((cc - low) * (65535 / (high - low)), 0, 65535).astype(np.uint16)
+    # --- Masks ---
+    # Smooth mask for blending final image
+    mask_disk_smooth = create_circular_mask((height, width), center, r, feather_width)
 
-    # Mask for the solar disk
-    mask = create_circular_mask((height, width), center, r, feather_width)
+    # Hard mask for processing (no feathering)
+    y, x = np.ogrid[:height, :width]
+    dist = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+    mask_disk_hard = (dist <= r).astype(np.uint8)   # 1 inside disk
+    mask_prom_hard = 1 - mask_disk_hard            # 1 outside disk
 
-    # Negative of the stretched disk
-    negative = 65535 - stretched
+    # --- Stretch prominences only ---
+    protu = cc.astype(np.float64) * mask_prom_hard
+    valid_p = protu[protu > 0]
+    protu_stretched = np.zeros_like(protu)
+    if valid_p.size > 0:
+        low_p = np.percentile(valid_p, 20)
+        high_p = np.percentile(valid_p, 99.0)
+        if high_p > low_p:
+            scaled = (protu[protu > 0] - low_p) * (65535 / (high_p - low_p))
+            protu_stretched[protu > 0] = np.clip(scaled, 0, 65535)
+        # optional gamma compression to preserve gradients
+        gamma_p = 1.3
+        protu_norm = np.clip(protu_stretched / 65535.0, 0, 1)
+        protu_stretched = np.power(protu_norm, gamma_p) * 65535
 
-    # Blend: negative disk + original outside
-    blended_image = blend_images(cc, negative, mask)
+    # --- Stretch surface only ---
+    surface = cc.astype(np.float64) * mask_disk_hard
+    valid_s = surface[surface > 0]
+    surface_stretched = np.zeros_like(surface)
+    if valid_s.size > 0:
+        low_s = np.percentile(valid_s, 0.5)
+        high_s = np.percentile(valid_s, 99.5)
+        if high_s > low_s:
+            scaled = (surface[surface > 0] - low_s) * (65535 / (high_s - low_s))
+            surface_stretched[surface > 0] = np.clip(scaled, 0, 65535)
 
-    # --- Boost highlights to make prominences nearly white ---
-    # Apply a slight gamma < 1 to brighten bright regions more
-    gamma = 0.8
-    blended_norm = blended_image.astype(np.float64) / 65535.0
-    blended_gamma = np.power(blended_norm, gamma)
-    blended_boosted = np.clip(blended_gamma * 65535.0, 0, 65535).astype(np.uint16)
+    # Negative of the stretched surface
+    surface_negative = 65535 - surface_stretched
 
-    # Save results
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.jpg'),
-                apply_watermark_if_enable(blended_boosted // 256, header, observer))
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.png'), blended_boosted)
-    save_as_fits(os.path.join(wd, 'sunscan_clahe_negative.fits'), blended_boosted, header)
+    # --- Blend using smooth mask for a soft transition at the limb ---
+    blended_image = (
+        mask_disk_smooth * surface_negative +
+        (1 - mask_disk_smooth) * protu_stretched
+    )
 
+    # --- Force sky outside prominences to black ---
+    # Outside hard disk, keep only stretched prominences (no sky glow)
+    blended_image[mask_prom_hard == 1] = protu_stretched[mask_prom_hard == 1]
 
+    # Convert to uint16
+    final_image = np.clip(blended_image, 0, 65535).astype(np.uint16)
+
+    # Save outputs
+    cv2.imwrite(os.path.join(wd, 'sunscan_negative.jpg'),
+                apply_watermark_if_enable(final_image // 256, header, observer))
+    cv2.imwrite(os.path.join(wd, 'sunscan_negative.png'), final_image)
+    save_as_fits(os.path.join(wd, 'sunscan_negative.fits'), final_image, header)
 
 def create_continuum_image(wd, frames, level, header, observer):
     """
@@ -604,8 +634,4 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    #he I
-    process_scan("E:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-15_07_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='heI',observer=' ')
-    # halpha
-    #process_scan("E:\sunscan\sample_data\storage\scans\\2024_11_13\\sunscan_2024_10_11-13_33_17\\scan.ser", mock_callback, True, True, 1100, False, advanced='', observer=' ')
-    
+    process_scan("C:\\Users\\g-ber\\Downloads\\2025_09_21-07_50_05-scan.ser", mock_callback, True, True, 1100, False, advanced='halpha',observer=' ')

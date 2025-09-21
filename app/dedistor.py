@@ -9,8 +9,10 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
-from process import sharpenImage, get_text_position, create_protus_image
+from process import sharpenImage, get_text_position, create_protus_image, create_negative_surface_image
 from storage import get_scan_tag
+
+from Inti_functions import detect_edge, fit_ellipse
 
 # ------------------------------------
 # CROSS_CORRELATE_SHIFT_FFT
@@ -314,12 +316,23 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
     
-    # if type == 'clahe':
+
+
     #     cc = create_protus_image(work_dir, cv2.flip(raw,0), 0, None, observer, None)
     #     imageio.v2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.png'), cc, format="png")
     #     cv2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(cc//256,text,observer))
 
     ccsmall = cv2.resize(sum_image/256,  (0,0), fx=0.4, fy=0.4)    
     cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
+
+    if type == 'clahe':
+        X = detect_edge(sum_image, zexcl=0.1, crop=0, disp_log=False)
+        EllipseFit,XE=fit_ellipse(sum_image, X, disp_log=False)
+        xc=round(EllipseFit[0][0])
+        yc=round(EllipseFit[0][1])
+        wi=round(EllipseFit[1]) # diametre
+        he=round(EllipseFit[2])
+        cercle=[xc,yc,wi,he]  
+        create_negative_surface_image(work_dir, sum_image, cercle, None, observer)
 
     
