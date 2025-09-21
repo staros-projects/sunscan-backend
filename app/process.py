@@ -265,52 +265,50 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
     return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
 
 
-# --- NEW FUNCTION ---
 def create_negative_surface_image(wd, cc, cercle, header, observer):
     """
-    Create a negative surface image of the Sun while keeping prominences unchanged.
-
-    Args:
-        wd (str): Working directory where the output will be saved.
-        cc (numpy.ndarray): 16-bit CLAHE surface image.
-        cercle (tuple): (x, y, width, height) of the detected solar disk.
-        header (dict): FITS header for metadata.
-        observer (str): Observer name for watermark.
-
-    Logic:
-        1. Build a circular mask covering the solar disk (with feathering).
-        2. Create a negative version of the CLAHE image (invert intensities).
-        3. Blend the negative surface with the original image using the mask,
-           so only the disk area becomes negative and the prominences remain.
-        4. Save as PNG, JPG (watermarked) and FITS.
+    Create a negative surface image with brighter prominences and
+    stronger surface contrast.
     """
     height, width = cc.shape
-    feather_width = 15  # smooth edge transition
+    feather_width = 15
 
-    # Center of the disk
+    # Disk geometry
     x0, y0 = cercle[0], cercle[1]
     center = (x0, y0)
-
-    # Calculate disk radius with a small margin
     disk_limit_percent = 0.002
     wi, he = int(cercle[2]), int(cercle[3])
     r = min(wi, he)
     r = int(r - round(r * disk_limit_percent)) - 18
 
-    # Mask = 1 inside the disk, 0 outside (with smooth border)
+    # --- Histogram stretch for better contrast on surface ---
+    # Tighten thresholds (e.g. 1%–99.8%)
+    low = np.percentile(cc, 1)
+    high = np.percentile(cc, 99.8)
+    stretched = np.clip((cc - low) * (65535 / (high - low)), 0, 65535).astype(np.uint16)
+
+    # Mask for the solar disk
     mask = create_circular_mask((height, width), center, r, feather_width)
 
-    # Negative version of the surface
-    negative = 65535 - cc
+    # Negative of the stretched disk
+    negative = 65535 - stretched
 
-    # Blend: negative inside disk + original outside
+    # Blend: negative disk + original outside
     blended_image = blend_images(cc, negative, mask)
 
-    # Save outputs
-    cv2.imwrite(os.path.join(wd, 'sunscan_negative.jpg'),
-                apply_watermark_if_enable(blended_image // 256, header, observer))
-    cv2.imwrite(os.path.join(wd, 'sunscan_negative.png'), blended_image)
-    save_as_fits(os.path.join(wd, 'sunscan_negative.fits'), blended_image, header)
+    # --- Boost highlights to make prominences nearly white ---
+    # Apply a slight gamma < 1 to brighten bright regions more
+    gamma = 0.8
+    blended_norm = blended_image.astype(np.float64) / 65535.0
+    blended_gamma = np.power(blended_norm, gamma)
+    blended_boosted = np.clip(blended_gamma * 65535.0, 0, 65535).astype(np.uint16)
+
+    # Save results
+    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.jpg'),
+                apply_watermark_if_enable(blended_boosted // 256, header, observer))
+    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.png'), blended_boosted)
+    save_as_fits(os.path.join(wd, 'sunscan_clahe_negative.fits'), blended_boosted, header)
+
 
 
 def create_continuum_image(wd, frames, level, header, observer):
