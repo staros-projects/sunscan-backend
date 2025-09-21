@@ -89,7 +89,7 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
         os.mkdir(path)
         
     scans = []
-    regex = r"stacked_(helium|helium_cont|clahe|cont|protus)_(\d)_(raw|sharpen).png"
+    regex = r"stacked_(helium|helium_cont|negative|clahe|cont|protus)_(\d)_(raw|sharpen).png"
     for root, dirs, files in os.walk(path, topdown=False):
         stacking_dirname = None
         images = []
@@ -101,6 +101,8 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
                     stacking_dirname = os.path.dirname(file_path)
                     cti = int(os.path.getmtime(stacking_dirname))
 
+                    if "stacked_negative" in file_path:
+                        images.append(file_path)
                     if "stacked_clahe" in file_path:
                         images.append(file_path)
                     elif "stacked_cont" in file_path:
@@ -136,6 +138,8 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
 
                     if "helium" in file_path:
                         images.append(file_path)
+                    elif "negative" in file_path:
+                        images.append(file_path)
                     elif "clahe" in file_path:
                         images.append(file_path)
                     elif "cont" in file_path:
@@ -156,6 +160,7 @@ def get_scans(path='storage/scans/', withDetails=False):
         
     scans = []
     images_type = { 'clahe':'Clahe + Unsharp mask',
+                    'negative':'Negative clahe + Unsharp mask',
                     'helium_cont': 'Helium + Continuum',
                     'helium': 'Helium',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
@@ -193,7 +198,7 @@ def get_scans(path='storage/scans/', withDetails=False):
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'
 
-        for suffix in ["clahe", "color", "doppler", "cont", "helium_cont", "helium"]:
+        for suffix in ["clahe", "negative", "color", "doppler", "cont", "helium_cont", "helium"]:
             fname = f"sunscan_{suffix}_proj.jpg"
             fpath = os.path.join(s["path"], fname)
             if os.path.exists(fpath):

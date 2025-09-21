@@ -307,10 +307,10 @@ def create_negative_surface_image(wd, cc, cercle, header, observer):
     blended_image = blend_images(cc, negative, mask)
 
     # Save outputs
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.jpg'),
+    cv2.imwrite(os.path.join(wd, 'sunscan_negative.jpg'),
                 apply_watermark_if_enable(blended_image // 256, header, observer))
-    cv2.imwrite(os.path.join(wd, 'sunscan_clahe_negative.png'), blended_image)
-    save_as_fits(os.path.join(wd, 'sunscan_clahe_negative.fits'), blended_image, header)
+    cv2.imwrite(os.path.join(wd, 'sunscan_negative.png'), blended_image)
+    save_as_fits(os.path.join(wd, 'sunscan_negative.fits'), blended_image, header)
 
 
 def create_continuum_image(wd, frames, level, header, observer):
