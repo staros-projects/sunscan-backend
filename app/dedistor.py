@@ -333,7 +333,7 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
         wi=round(EllipseFit[1]) # diametre
         he=round(EllipseFit[2])
         cercle=[xc,yc,wi,he]  
-        create_negative_surface_image(work_dir, sum_image, cercle, None, observer, 'stacked_negative_'+str(scan_count)+'_raw')
-        create_negative_surface_image(work_dir, sum_image, cercle, None, observer, 'stacked_negative_'+str(scan_count)+'_sharpen')
+        create_negative_surface_image(work_dir, sum_image, cercle, text, observer, 'stacked_negative_'+str(scan_count)+'_raw')
+        create_negative_surface_image(work_dir, sum_image, cercle, text, observer, 'stacked_negative_'+str(scan_count)+'_sharpen')
 
     
