@@ -454,36 +454,10 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
             i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
             
-            img_doppler[:,:,0] = i1 # blue
-            img_doppler[:,:,1] = i2 # green
-            img_doppler[:,:,2] = i3 # red
+            img_doppler[:,:,0] = i1 * 0.8  # bleu
+            img_doppler[:,:,1] = i2 * 0.3  # vert réduit
+            img_doppler[:,:,2] = i3 * 1.2  # rouge renforcé
             img_doppler=cv2.flip(img_doppler,0)
-                    
-            # BGR → HSV
-            hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
-            H, S, V = cv2.split(hsv)
-            
-            # Correction orange → plus rouge
-            mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
-            H[mask_orange] -= 20               # décale la teinte vers le rouge
-            S[mask_orange] *= 1.5              # booste la saturation
-                            
-            
-            # Correction bleu → plus bleu
-            mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
-            H[mask_blue] += 20 
-            S[mask_blue] *= 1.5 
-            #V[mask_blue] *= 1.1
-            #V[mask_blue] += 20
-            
-            # Après ton traitement en float32
-            H = np.clip(H, 0, 179)
-            S = np.clip(S, 0, 255) 
-            V = np.clip(V, 0, 255) 
-            
-            # Reconstruction
-            hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
-            img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
 
             # sauvegarde en png 
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
