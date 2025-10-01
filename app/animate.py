@@ -142,7 +142,7 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
             dither=True
         )
         print(f"Preview GIF saved at {preview_output_path}")
-
+        
     frames[0].save(
         output_path,
         save_all=True,
