@@ -780,47 +780,113 @@ def process_stack(request: PostProcessRequest):
     end_time = time.perf_counter()
     print(f" {end_time - start_time:.6f} secondes") 
     
-     
+
 @app.post("/sunscan/process/animate/")
 def process_animate(request: PostProcessRequest):
     # Supported filenames and output GIF names
-
     gif_names = {
         "sunscan_clahe.png": "animated_clahe.gif",
+        "sunscan_negative.png": "animated_negative.gif",
         "sunscan_helium.png": "animated_helium.gif",
         "sunscan_helium_cont.png": "animated_helium_cont.gif",
         "sunscan_protus.png": "animated_protus.gif",
         "sunscan_cont.png": "animated_cont.gif",
     }
 
+    gif_names_stacking = {
+        "stacked_clahe_*_raw.png": "stacked_clahe_raw.gif",
+        "stacked_clahe_*_sharpen.png": "stacked_clahe_sharpen.gif",
+        "stacked_negative_*_raw.png": "stacked_negative.gif",
+        "stacked_negative_*_sharpen.png": "stacked_negative_sharpen.gif",
+        "stacked_helium_*_raw.png": "stacked_helium.gif",
+        "stacked_helium_*_sharpen.png": "stacked_helium_sharpen.gif",
+        "stacked_helium_cont_*_raw.png": "stacked_helium_cont.gif",
+        "stacked_helium_cont_*_sharpen.png": "stacked_helium_cont_sharpen.gif",
+        "stacked_protus_*_raw.png": "stacked_protus.gif",
+        "stacked_protus_*_sharpen.png": "stacked_protus_sharpen.gif",
+        "stacked_cont_*_raw.png": "stacked_cont.gif",
+        "stacked_cont_*_sharpen.png": "stacked_cont_sharpen.gif",
+    }
+
     gifs_created = []
 
     stacking_dir = './storage/animations'
-    if not os.path.exists(stacking_dir):
-        os.mkdir(stacking_dir)
+    os.makedirs(stacking_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     work_dir = os.path.join(stacking_dir, timestamp)
-    if not os.path.exists(work_dir):
-        os.mkdir(work_dir)
+    os.makedirs(work_dir, exist_ok=True)
 
-    # Check for each required file type and generate GIFs if possible
-    for required_file in gif_names.keys():
-        matching_paths = []
+    # Vérifier si on est en mode stacking
+    is_stacking_mode = any("stacking" in p for p in request.paths)
 
-        for path_str in request.paths:
-            path = Path(os.path.dirname(path_str)) / required_file
-            print(path)
+    if is_stacking_mode:
+        # MODE STACKING
+        for pattern, gif_name in gif_names_stacking.items():
+            regex_pattern = pattern.replace("*", r"(\d+)")  # transformer * en regex pour chiffres
+            regex = re.compile(regex_pattern)
 
-            if path.exists() or os.path.exists(path):
-                matching_paths.append(path)
+            matching_paths = []
 
-        print(matching_paths)
-        # Create GIF if all paths contain the required file
-        if len(matching_paths) == len(request.paths):
-            output_gif_path = os.path.join(work_dir, gif_names[required_file])
-            create_gif(matching_paths, request.watermark, request.observer, output_gif_path, request.frame_duration, request.display_datetime, request.resize_gif, request.bidirectional, request.add_average_frame)
-            gifs_created.append(str(output_gif_path))
+            # scanner tous les répertoires donnés
+            for path_str in request.paths:
+                directory = Path(path_str)
+                if not directory.exists():
+                    continue
+
+                for file in directory.glob("*.png"):
+                    if regex.fullmatch(file.name):
+                        matching_paths.append(file)
+
+            # si on a trouvé des fichiers correspondants → créer le GIF
+            if matching_paths:
+                # trier par numéro (important pour l'ordre d'animation)
+                def extract_number(f):
+                    match = re.search(r"(\d+)", f.name)
+                    return int(match.group(1)) if match else 0
+
+                matching_paths.sort(key=extract_number)
+
+                output_gif_path = os.path.join(work_dir, gif_name)
+                create_gif(
+                    matching_paths,
+                    request.watermark,
+                    request.observer,
+                    output_gif_path,
+                    request.frame_duration,
+                    request.display_datetime,
+                    request.resize_gif,
+                    request.bidirectional,
+                    request.add_average_frame,
+                )
+                gifs_created.append(str(output_gif_path))
+
+    else:
+        # MODE CLASSIQUE
+        for required_file, gif_name in gif_names.items():
+            matching_paths = []
+
+            for path_str in request.paths:
+                path = Path(os.path.dirname(path_str)) / required_file
+
+                if path.exists():
+                    matching_paths.append(path)
+
+            # Create GIF if all paths contain the required file
+            if len(matching_paths) == len(request.paths):
+                output_gif_path = os.path.join(work_dir, gif_name)
+                create_gif(
+                    matching_paths,
+                    request.watermark,
+                    request.observer,
+                    output_gif_path,
+                    request.frame_duration,
+                    request.display_datetime,
+                    request.resize_gif,
+                    request.bidirectional,
+                    request.add_average_frame,
+                )
+                gifs_created.append(str(output_gif_path))
 
     if not gifs_created:
         raise HTTPException(status_code=400, detail="No GIFs were created. Ensure the required files exist.")
