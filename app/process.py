@@ -11,7 +11,7 @@ from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
 from mapping import create_solar_planisphere
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced=''):
+def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced='', doppler_color=0):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -108,7 +108,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
             if dopcont:
-                create_doppler_image(WorkDir, frames, cercle, header, observer)
+                create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -431,7 +431,7 @@ def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
     else:
         return cc
 
-def create_doppler_image(wd, frames, cercle, header, observer):
+def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
     """
     Create and save a Doppler image of the sun.
 
@@ -480,25 +480,26 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
-            # BGR → HSV
-            hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
-            H, S, V = cv2.split(hsv)
-            
-            # Correction orange → plus rouge
-            mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
-            H[mask_orange] -= 20             # décale la teinte vers le rouge
-                            
-            # Correction bleu → plus bleu
-            mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
-            H[mask_blue] += 20 
+            if doppler_color:
+                # BGR → HSV
+                hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
+                H, S, V = cv2.split(hsv)
+                
+                # Correction orange → plus rouge
+                mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
+                H[mask_orange] -= 20             # décale la teinte vers le rouge
+                                
+                # Correction bleu → plus bleu
+                mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
+                H[mask_blue] += 20 
 
-            H = np.clip(H, 0, 180)
-            S = np.clip(S, 0, 255) 
-            V = np.clip(V, 0, 255) 
-            
-            # Reconstruction
-            hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
-            img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+                H = np.clip(H, 0, 180)
+                S = np.clip(S, 0, 255) 
+                V = np.clip(V, 0, 255) 
+                
+                # Reconstruction
+                hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
+                img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
 
             # sauvegarde en png 
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
@@ -519,25 +520,27 @@ def create_doppler_image(wd, frames, cercle, header, observer):
             img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
-            # BGR → HSV
-            hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
-            H, S, V = cv2.split(hsv)
-            
-            # Correction orange → plus rouge
-            mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
-            H[mask_orange] -= 20             # décale la teinte vers le rouge
-                            
-            # Correction bleu → plus bleu
-            mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
-            H[mask_blue] += 20 
+            if doppler_color:
 
-            H = np.clip(H, 0, 180)
-            S = np.clip(S, 0, 255) 
-            V = np.clip(V, 0, 255) 
-            
-            # Reconstruction
-            hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
-            img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+                # BGR → HSV
+                hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
+                H, S, V = cv2.split(hsv)
+                
+                # Correction orange → plus rouge
+                mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
+                H[mask_orange] -= 20             # décale la teinte vers le rouge
+                                
+                # Correction bleu → plus bleu
+                mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
+                H[mask_blue] += 20 
+
+                H = np.clip(H, 0, 180)
+                S = np.clip(S, 0, 255) 
+                V = np.clip(V, 0, 255) 
+                
+                # Reconstruction
+                hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
+                img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
 
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)

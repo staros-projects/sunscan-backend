@@ -93,10 +93,11 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
         image = image // 256
         frame = Image.fromarray(image).convert("RGB")
         # Extract the datetime from the path and format it
-        if (image_path.include("stacking")):
+        if ("stacking" in str(image_path)):
             datetime_str = extract_datetime_from_path(str(image_path), "%Y-%m-%d_%H-%M-%S")
+            output_path = output_path.replace("stacked", 'animated')
         else:
-            datetime_str = extract_datetime_from_path(str(image_path))
+            datetime_str = extract_datetime_from_path(str(image_path), "sunscan_%Y_%m_%d-%H_%M_%S")
         if display_datetime:
             tag = get_scan_tag(os.path.dirname(image_path))
             txt = datetime_str if not tag else datetime_str+" - "+tag

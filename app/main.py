@@ -79,6 +79,7 @@ class Scan(ScanBase):
     observer: str = ''
     description: str = ''
     advanced: str = ''
+    doppler_color: int 
 
 class CameraControls(BaseModel):
     exp: float
@@ -761,7 +762,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
     """
     if (os.path.exists(scan.filename)):
         print(scan)
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer, advanced=scan.advanced)
+        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer, advanced=scan.advanced, doppler_color=scan.doppler_color)
 
 
 @app.post("/sunscan/process/stack/")
@@ -846,6 +847,7 @@ def process_animate(request: PostProcessRequest):
                     return int(match.group(1)) if match else 0
 
                 matching_paths.sort(key=extract_number)
+                print(matching_paths)
 
                 output_gif_path = os.path.join(work_dir, gif_name)
                 create_gif(
