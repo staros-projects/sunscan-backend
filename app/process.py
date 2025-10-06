@@ -281,11 +281,11 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
     disk_limit_percent = 0.002
     wi, he = int(cercle[2]), int(cercle[3])
     r = min(wi, he)
-    r = int(r - round(r * disk_limit_percent)) - 5
+    r = int(r - round(r * disk_limit_percent)) - 4
 
     # --- Masks ---
     # Smooth mask for blending final image
-    mask_disk_smooth = create_circular_mask((height, width), center, r, feather_width)
+    mask_disk_smooth = create_circular_mask((height, width), center, r+14, feather_width)
 
     # Hard mask for processing (no feathering)
     y, x = np.ogrid[:height, :width]
@@ -298,7 +298,7 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
     valid_p = protu[protu > 0]
     protu_stretched = np.zeros_like(protu)
     if valid_p.size > 0:
-        low_p = np.percentile(valid_p, 20)
+        low_p = np.percentile(valid_p, 0)
         high_p = np.percentile(valid_p, 99.0)
         if high_p > low_p:
             scaled = (protu[protu > 0] - low_p) * (65535 / (high_p - low_p))
@@ -313,20 +313,17 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
     valid_s = surface[surface > 0]
     surface_stretched = np.zeros_like(surface)
     if valid_s.size > 0:
-        low_s = np.percentile(valid_s, 0.5)
+        low_s = np.percentile(valid_s, 0.075)
         high_s = np.percentile(valid_s, 99.9)
         if high_s > low_s:
             scaled = (surface[surface > 0] - low_s) * (65535 / (high_s - low_s))
             surface_stretched[surface > 0] = np.clip(scaled, 0, 65535)
 
     # Negative of the stretched surface
-    surface_negative = 65535 - surface_stretched
+    surface_negative = 65535 - surface_stretched 
 
     # --- Blend using smooth mask for a soft transition at the limb ---
-    blended_image = (
-        mask_disk_smooth * surface_negative +
-        (1 - mask_disk_smooth) * protu_stretched
-    )
+    blended_image = blend_images(cc, surface_negative, mask_disk_smooth)
 
     # --- Force sky outside prominences to black ---
     # Outside hard disk, keep only stretched prominences (no sky glow)
