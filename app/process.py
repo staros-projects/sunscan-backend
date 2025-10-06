@@ -264,7 +264,6 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
     # Position the text in the bottom-left corner with some padding
     return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
 
-
 def create_negative_surface_image(wd, cc, cercle, header, observer, return_image=False):
     """
     Negative surface with bright prominences and clean black sky.
@@ -273,7 +272,7 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
     - Outside sky: forced to black
     """
     height, width = cc.shape
-    feather_width = 10
+    feather_width = 5
 
     # Disk geometry
     x0, y0 = cercle[0], cercle[1]
@@ -281,67 +280,65 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
     disk_limit_percent = 0.002
     wi, he = int(cercle[2]), int(cercle[3])
     r = min(wi, he)
-    r = int(r - round(r * disk_limit_percent)) - 4
+    r = int(r - round(r * disk_limit_percent))-5 
 
     # --- Masks ---
-    # Smooth mask for blending final image
-    mask_disk_smooth = create_circular_mask((height, width), center, r+14, feather_width)
+    mask_disk_smooth = create_circular_mask((height, width), center, r-5, feather_width).astype(np.float32)
+    mask_disk_smooth = np.clip(mask_disk_smooth, 0, 1)
 
-    # Hard mask for processing (no feathering)
     y, x = np.ogrid[:height, :width]
-    dist = np.sqrt((x - center[0])**2 + (y - center[1])**2)
-    mask_disk_hard = (dist <= r).astype(np.uint8)   # 1 inside disk
-    mask_prom_hard = 1 - mask_disk_hard            # 1 outside disk
+    dist = np.sqrt((x - center[0]) ** 2 + (y - center[1]) ** 2)
+    mask_disk_hard = (dist <= r).astype(np.uint8)
+    mask_prom_hard = 1 -  (dist <= r-10).astype(np.uint8)
 
-    # --- Stretch prominences only ---
+    # --- Stretch prominences ---
     protu = cc.astype(np.float64) * mask_prom_hard
     valid_p = protu[protu > 0]
     protu_stretched = np.zeros_like(protu)
     if valid_p.size > 0:
-        low_p = np.percentile(valid_p, 0)
-        high_p = np.percentile(valid_p, 99.0)
+        low_p = np.percentile(valid_p, 20)
+        high_p = np.percentile(valid_p, 97)
         if high_p > low_p:
             scaled = (protu[protu > 0] - low_p) * (65535 / (high_p - low_p))
             protu_stretched[protu > 0] = np.clip(scaled, 0, 65535)
-        # optional gamma compression to preserve gradients
         gamma_p = 1.3
         protu_norm = np.clip(protu_stretched / 65535.0, 0, 1)
         protu_stretched = np.power(protu_norm, gamma_p) * 65535
 
-    # --- Stretch surface only ---
+    # --- Stretch surface ---
     surface = cc.astype(np.float64) * mask_disk_hard
     valid_s = surface[surface > 0]
     surface_stretched = np.zeros_like(surface)
     if valid_s.size > 0:
-        low_s = np.percentile(valid_s, 0.075)
+        low_s = np.percentile(valid_s, 0.085)
         high_s = np.percentile(valid_s, 99.9)
         if high_s > low_s:
             scaled = (surface[surface > 0] - low_s) * (65535 / (high_s - low_s))
             surface_stretched[surface > 0] = np.clip(scaled, 0, 65535)
 
-    # Negative of the stretched surface
-    surface_negative = 65535 - surface_stretched 
+    # --- Negative surface ---
+    surface_negative = 65535 - surface_stretched
 
-    # --- Blend using smooth mask for a soft transition at the limb ---
-    blended_image = blend_images(cc, surface_negative, mask_disk_smooth)
+    # --- Blend inline ---
+    surface_f = surface_negative.astype(np.float32)
+    protu_f = protu_stretched.astype(np.float32)
+    mask_f = mask_disk_smooth.astype(np.float32)
 
-    # --- Force sky outside prominences to black ---
-    # Outside hard disk, keep only stretched prominences (no sky glow)
-    blended_image[mask_prom_hard == 1] = protu_stretched[mask_prom_hard == 1]
+    blended_image = surface_f * mask_f + protu_f * (1.0 - mask_f)
 
     # Convert to uint16
     final_image = np.clip(blended_image, 0, 65535).astype(np.uint16)
 
+    # --- Save or return ---
     if return_image:
         return final_image
 
-    # Create filename
     filename = 'sunscan_negative'
-    # Save outputs
     cv2.imwrite(os.path.join(wd, filename + '.jpg'),
                 apply_watermark_if_enable(final_image // 256, header, observer))
     cv2.imwrite(os.path.join(wd, filename + '.png'), final_image)
     save_as_fits(os.path.join(wd, filename + '.fits'), final_image, header)
+
 
 def create_continuum_image(wd, frames, level, header, observer):
     """

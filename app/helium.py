@@ -138,8 +138,6 @@ def process_and_save_images(cc, result_image, cercle, output_dir, name, watermar
     # Blend the images
     blended_image = blend_images(cc, result_image, mask)
 
-
-
     # Save the final blended image
     cv2.imwrite(os.path.join(output_dir,name+'.jpg'), watermark_fct(blended_image//256,header,observer, desc))
     cv2.imwrite(os.path.join(output_dir,name+'.png'),blended_image)
