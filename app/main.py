@@ -80,6 +80,7 @@ class Scan(ScanBase):
     description: str = ''
     advanced: str = ''
     doppler_color: int 
+    process_doppler: bool
 
 class CameraControls(BaseModel):
     exp: float
@@ -762,7 +763,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
     """
     if (os.path.exists(scan.filename)):
         print(scan)
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer, advanced=scan.advanced, doppler_color=scan.doppler_color)
+        background_tasks.add_task(process_scan,callback=notifyScanProcessCompleted, scan=scan)
 
 
 @app.post("/sunscan/process/stack/")

@@ -11,7 +11,7 @@ from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
 from mapping import create_solar_planisphere
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced='', doppler_color=0):
+def process_scan(callback, scan):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -25,7 +25,22 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     Returns:
         None
     """
+    serfile=scan.filename
     WorkDir = os.path.dirname(serfile)
+    dopcont=scan.dopcont
+    autocrop=scan.autocrop
+    autocrop_size=scan.autocrop_size
+    noisereduction=scan.noisereduction 
+    dopplerShift=scan.doppler_shift
+    contShift=scan.continuum_shift
+    contSharpLevel=scan.cont_sharpen_level
+    surfaceSharpLevel=scan.surface_sharpen_level
+    proSharpLevel=scan.pro_sharpen_level
+    offset=scan.offset
+    observer=scan.observer
+    advanced=scan.advanced
+    doppler_color=scan.doppler_color
+    process_doppler=scan.process_doppler
       
     if not os.path.exists(serfile):
         return callback(serfile, 'failed')
@@ -63,7 +78,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             'FREE_AUTOPOLY': offset != 0, 
             'ZEE_AUTOPOLY': False, 
             'NOISEREDUC': noisereduction, 
-            'DOPCONT': dopcont, 
+            'DOPCONT': process_doppler, 
             'VOL': False, 
             'POL': False, 
             'WEAK': offset != 0, 
@@ -107,7 +122,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             create_protus_image(WorkDir, cv2.flip(raw,0), cercle,proSharpLevel, header, observer, 'sunscan_protus')
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
-            if dopcont:
+            if dopcont and process_doppler:
                 create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
@@ -352,7 +367,7 @@ def create_continuum_image(wd, frames, level, header, observer):
     Returns:
         None
     """
-    if len(frames) >3:
+    if len(frames) >3 or len(frames) == 2:
         clahe = cv2.createCLAHE(clipLimit=0.8, tileGridSize=(2,2))
         cl1 = clahe.apply(frames[len(frames)-1])
 
@@ -513,7 +528,7 @@ def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
-            img_doppler=cv2.flip(img_doppler,0)
+         
 
             if doppler_color:
 
@@ -536,6 +551,7 @@ def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
                 # Reconstruction
                 hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
                 img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+                
 
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)

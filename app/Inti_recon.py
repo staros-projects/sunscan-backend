@@ -285,7 +285,7 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
         print('shift doppler 1 : ',shift_dop1)
         print('shift doppler 2 : ',shift_dop2)
     else:
-        range_dec=[0]
+        range_dec=[0, shift_cont]
         """
         if shift==0:
             range_dec=[0]
