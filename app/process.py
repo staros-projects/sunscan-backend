@@ -224,7 +224,8 @@ def create_surface_image(wd, frames, helium, level, header, observer, color, cer
 
     Colorise_Image(color, cc, wd, header, observer)
 
-    create_negative_surface_image(wd, cc, cercle, header, observer)
+    if color == 'halpha':
+        create_negative_surface_image(wd, cc, cercle, header, observer)
     return raw
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
