@@ -56,7 +56,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.4.0'
+BACKEND_API_VERSION = '1.4.2'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -781,7 +781,25 @@ def process_stack(request: PostProcessRequest):
     stack(request.paths, required_files, request.observer, request.patch_size, request.step_size, request.intensity_threshold)
     end_time = time.perf_counter()
     print(f" {end_time - start_time:.6f} secondes") 
-    
+
+def extract_stacked_time(f):
+    try:
+        dt = datetime.strptime(f, "%Y-%m-%d_%H-%M-%S")
+        return dt.timestamp()
+    except Exception:
+        return f  
+
+def extract_scan_time(f):
+    import re
+    from datetime import datetime
+    match = re.search(r"sunscan_(\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2})", str(f))
+    if match:
+        try:
+            dt = datetime.strptime(match.group(1), "%Y_%m_%d-%H_%M_%S")
+            return dt.timestamp()
+        except Exception:
+            return match.group(1)
+    return str(f)
 
 @app.post("/sunscan/process/animate/")
 def process_animate(request: PostProcessRequest):
@@ -842,12 +860,8 @@ def process_animate(request: PostProcessRequest):
 
             # si on a trouvé des fichiers correspondants → créer le GIF
             if matching_paths:
-                # trier par numéro (important pour l'ordre d'animation)
-                def extract_number(f):
-                    match = re.search(r"(\d+)", f.name)
-                    return int(match.group(1)) if match else 0
 
-                matching_paths.sort(key=extract_number)
+                matching_paths.sort(key=extract_stacked_time)
                 print(matching_paths)
 
                 output_gif_path = os.path.join(work_dir, gif_name)
@@ -874,6 +888,8 @@ def process_animate(request: PostProcessRequest):
 
                 if path.exists():
                     matching_paths.append(path)
+            # Sort by date
+            matching_paths.sort(key=extract_scan_time)
 
             # Create GIF if all paths contain the required file
             if len(matching_paths) == len(request.paths):
