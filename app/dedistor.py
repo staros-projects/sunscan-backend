@@ -271,12 +271,12 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
     if tag:
         watermark_txt_t += ' - '+ tag
 
-    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt_t, observer)
+    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt_t, observer, tag)
  
     if status['helium_cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer)
+        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer, tag)
     elif status['cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer)
+        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer, tag)
 
         
 def apply_watermark_if_enable(frame, text, observer):
@@ -300,7 +300,7 @@ def apply_watermark_if_enable(frame, text, observer):
     return np.array(image)
 
 
-def write_images(work_dir, sum_image, type, scan_count, text, observer):
+def write_images(work_dir, sum_image, type, scan_count, text, observer, tag):
     sum_image = sum_image / scan_count
     sum_image = sum_image.astype(np.uint16)
 
@@ -324,7 +324,9 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
     ccsmall = cv2.resize(sum_image2/256,  (0,0), fx=0.4, fy=0.4)    
     cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
 
-    if type == 'clahe':
+    tag_enabled_for_negative = ['halpha', 'hbeta', 'hgamma', 'hdelta', 'hepsilon']
+
+    if type == 'clahe' and tag in tag_enabled_for_negative:
         X = detect_edge(sum_image, zexcl=0.1, crop=0, disp_log=False)
         EllipseFit,XE=fit_ellipse(sum_image, X, disp_log=False)
         xc=round(EllipseFit[0][0])

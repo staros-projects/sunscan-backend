@@ -239,7 +239,9 @@ def create_surface_image(wd, frames, helium, level, header, observer, color, cer
 
     Colorise_Image(color, cc, wd, header, observer)
 
-    if color == 'halpha':
+    tag_enabled_for_negative = ['halpha', 'hbeta', 'hgamma', 'hdelta', 'hepsilon']
+    
+    if color in tag_enabled_for_negative:
         create_negative_surface_image(wd, cc, cercle, header, observer)
     return raw
 
