@@ -9,8 +9,10 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
-from process import sharpenImage, get_text_position, create_protus_image
+from process import sharpenImage, get_text_position, create_protus_image, create_negative_surface_image
 from storage import get_scan_tag
+
+from Inti_functions import detect_edge, fit_ellipse
 
 # ------------------------------------
 # CROSS_CORRELATE_SHIFT_FFT
@@ -269,12 +271,12 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
     if tag:
         watermark_txt_t += ' - '+ tag
 
-    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt_t, observer)
+    write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt_t, observer, tag)
  
     if status['helium_cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer)
+        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer, tag)
     elif status['cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer)
+        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer, tag)
 
         
 def apply_watermark_if_enable(frame, text, observer):
@@ -298,7 +300,7 @@ def apply_watermark_if_enable(frame, text, observer):
     return np.array(image)
 
 
-def write_images(work_dir, sum_image, type, scan_count, text, observer):
+def write_images(work_dir, sum_image, type, scan_count, text, observer, tag):
     sum_image = sum_image / scan_count
     sum_image = sum_image.astype(np.uint16)
 
@@ -306,20 +308,37 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer):
     if max_value != 0:
         sum_image = (sum_image / max_value) * 65535.0
     sum_image = sum_image.astype(np.uint16)
-    raw = sum_image
 
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
-    sum_image = sharpenImage(sum_image, 1 if scan_count<8 else 2)
-    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image, format="png")
-    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
+    sum_image2 = sharpenImage(sum_image, 1 if scan_count<8 else 2)
+    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image2, format="png")
+    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image2//256,text,observer))
     
-    # if type == 'clahe':
+
+
     #     cc = create_protus_image(work_dir, cv2.flip(raw,0), 0, None, observer, None)
     #     imageio.v2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.png'), cc, format="png")
     #     cv2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(cc//256,text,observer))
 
-    ccsmall = cv2.resize(sum_image/256,  (0,0), fx=0.4, fy=0.4)    
+    ccsmall = cv2.resize(sum_image2/256,  (0,0), fx=0.4, fy=0.4)    
     cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
+
+    tag_enabled_for_negative = ['halpha', 'hbeta', 'hgamma', 'hdelta', 'hepsilon']
+
+    if type == 'clahe' and tag in tag_enabled_for_negative:
+        X = detect_edge(sum_image, zexcl=0.1, crop=0, disp_log=False)
+        EllipseFit,XE=fit_ellipse(sum_image, X, disp_log=False)
+        xc=round(EllipseFit[0][0])
+        yc=round(EllipseFit[0][1])
+        wi=round(EllipseFit[1]) # diametre
+        he=round(EllipseFit[2])
+        cercle=[xc,yc,wi,he]  
+        type = 'negative'
+        text = text.replace('stacked images', 'stacked negative images')
+        n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, return_image=True)
+        imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), n, format="png")
+        cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
+
 
     

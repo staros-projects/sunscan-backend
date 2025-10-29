@@ -5,11 +5,13 @@ import datetime
 import numpy as np
 from astropy.io import fits
 from Inti_recon import solex_proc 
+from Inti_recon2 import solex_proc2
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
+from mapping import create_solar_planisphere
 
-def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=1100, noisereduction=False, dopplerShift=5, contShift=16, contSharpLevel=2, surfaceSharpLevel=2, proSharpLevel=1, offset=0, observer='', advanced=''):
+def process_scan(callback, scan):
     """
     Process a solar scan from a .ser file and generate various images.
 
@@ -23,7 +25,22 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     Returns:
         None
     """
+    serfile=scan.filename
     WorkDir = os.path.dirname(serfile)
+    dopcont=scan.dopcont
+    autocrop=scan.autocrop
+    autocrop_size=scan.autocrop_size
+    noisereduction=scan.noisereduction 
+    dopplerShift=scan.doppler_shift
+    contShift=scan.continuum_shift
+    contSharpLevel=scan.cont_sharpen_level
+    surfaceSharpLevel=scan.surface_sharpen_level
+    proSharpLevel=scan.pro_sharpen_level
+    offset=scan.offset
+    observer=scan.observer
+    advanced=scan.advanced
+    doppler_color=scan.doppler_color
+    process_doppler=scan.process_doppler
       
     if not os.path.exists(serfile):
         return callback(serfile, 'failed')
@@ -61,7 +78,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
             'FREE_AUTOPOLY': offset != 0, 
             'ZEE_AUTOPOLY': False, 
             'NOISEREDUC': noisereduction, 
-            'DOPCONT': dopcont, 
+            'DOPCONT': process_doppler, 
             'VOL': False, 
             'POL': False, 
             'WEAK': offset != 0, 
@@ -77,7 +94,7 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
     data_entete= ['', '', 0.0, 0.0, '', 0, 'Manual']
     ang_P=0.0
     solar_dict={}
-    param=[0,0,autocrop_size,autocrop_size]
+    param=[0,0,autocrop_size,autocrop_size, 0,0]
 
     color = None
     tag_files = [f for f in os.listdir(WorkDir) if f.startswith('tag_')]
@@ -93,20 +110,20 @@ def process_scan(serfile, callback, dopcont=False, autocrop=True, autocrop_size=
         header = update_header(WorkDir, header, observer)
 
         if helium:
-            result_image = process_helium(WorkDir, frames, header, observer, apply_watermark_if_enable, Colorise_Image)
+            result_image = process_helium(WorkDir, frames, cercle, header, observer, apply_watermark_if_enable, Colorise_Image)
 
  
         else:
             # Create and save surface image
-            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color)
+            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color, cercle)
             # Create and save continuum image
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
-            create_protus_image(WorkDir, cv2.flip(raw,0), proSharpLevel, header, observer, 'sunscan_protus')
+            create_protus_image(WorkDir, cv2.flip(raw,0), cercle,proSharpLevel, header, observer, 'sunscan_protus')
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
-            if dopcont:
-                create_doppler_image(WorkDir, frames, header, observer)
+            if dopcont and process_doppler:
+                create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -154,7 +171,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, helium, level, header, observer, color):
+def create_surface_image(wd, frames, helium, level, header, observer, color, cercle):
     """
     Create and save various surface images of the sun.
 
@@ -211,6 +228,7 @@ def create_surface_image(wd, frames, helium, level, header, observer, color):
     try:
         cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'), apply_watermark_if_enable(cc//256,header,observer))
         cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
+        create_solar_planisphere(os.path.join(wd,'sunscan_clahe.png'))
         save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
         # Create and save a smaller preview image
         ccsmall = cv2.resize(cc/256,  (0,0), fx=0.4, fy=0.4) 
@@ -220,6 +238,11 @@ def create_surface_image(wd, frames, helium, level, header, observer, color):
         print(e)
 
     Colorise_Image(color, cc, wd, header, observer)
+
+    tag_enabled_for_negative = ['halpha', 'hbeta', 'hgamma', 'hdelta', 'hepsilon']
+    
+    if color in tag_enabled_for_negative:
+        create_negative_surface_image(wd, cc, cercle, header, observer)
     return raw
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
@@ -259,6 +282,81 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
     # Position the text in the bottom-left corner with some padding
     return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
 
+def create_negative_surface_image(wd, cc, cercle, header, observer, return_image=False):
+    """
+    Negative surface with bright prominences and clean black sky.
+    - Surface: stretched + inverted
+    - Prominences: stretched separately
+    - Outside sky: forced to black
+    """
+    height, width = cc.shape
+    feather_width = 5
+
+    # Disk geometry
+    x0, y0 = cercle[0], cercle[1]
+    center = (x0, y0)
+    disk_limit_percent = 0.002
+    wi, he = int(cercle[2]), int(cercle[3])
+    r = min(wi, he)
+    r = int(r - round(r * disk_limit_percent))-5 
+
+    # --- Masks ---
+    mask_disk_smooth = create_circular_mask((height, width), center, r-5, feather_width).astype(np.float32)
+    mask_disk_smooth = np.clip(mask_disk_smooth, 0, 1)
+
+    y, x = np.ogrid[:height, :width]
+    dist = np.sqrt((x - center[0]) ** 2 + (y - center[1]) ** 2)
+    mask_disk_hard = (dist <= r).astype(np.uint8)
+    mask_prom_hard = 1 -  (dist <= r-10).astype(np.uint8)
+
+    # --- Stretch prominences ---
+    protu = cc.astype(np.float64) * mask_prom_hard
+    valid_p = protu[protu > 0]
+    protu_stretched = np.zeros_like(protu)
+    if valid_p.size > 0:
+        low_p = np.percentile(valid_p, 20)
+        high_p = np.percentile(valid_p, 97)
+        if high_p > low_p:
+            scaled = (protu[protu > 0] - low_p) * (65535 / (high_p - low_p))
+            protu_stretched[protu > 0] = np.clip(scaled, 0, 65535)
+        gamma_p = 1.3
+        protu_norm = np.clip(protu_stretched / 65535.0, 0, 1)
+        protu_stretched = np.power(protu_norm, gamma_p) * 65535
+
+    # --- Stretch surface ---
+    surface = cc.astype(np.float64) * mask_disk_hard
+    valid_s = surface[surface > 0]
+    surface_stretched = np.zeros_like(surface)
+    if valid_s.size > 0:
+        low_s = np.percentile(valid_s, 0.085)
+        high_s = np.percentile(valid_s, 99.9)
+        if high_s > low_s:
+            scaled = (surface[surface > 0] - low_s) * (65535 / (high_s - low_s))
+            surface_stretched[surface > 0] = np.clip(scaled, 0, 65535)
+
+    # --- Negative surface ---
+    surface_negative = 65535 - surface_stretched
+
+    # --- Blend inline ---
+    surface_f = surface_negative.astype(np.float32)
+    protu_f = protu_stretched.astype(np.float32)
+    mask_f = mask_disk_smooth.astype(np.float32)
+
+    blended_image = surface_f * mask_f + protu_f * (1.0 - mask_f)
+
+    # Convert to uint16
+    final_image = np.clip(blended_image, 0, 65535).astype(np.uint16)
+
+    # --- Save or return ---
+    if return_image:
+        return final_image
+
+    filename = 'sunscan_negative'
+    cv2.imwrite(os.path.join(wd, filename + '.jpg'),
+                apply_watermark_if_enable(final_image // 256, header, observer))
+    cv2.imwrite(os.path.join(wd, filename + '.png'), final_image)
+    save_as_fits(os.path.join(wd, filename + '.fits'), final_image, header)
+
 
 def create_continuum_image(wd, frames, level, header, observer):
     """
@@ -271,7 +369,7 @@ def create_continuum_image(wd, frames, level, header, observer):
     Returns:
         None
     """
-    if len(frames) >3:
+    if len(frames) >3 or len(frames) == 2:
         clahe = cv2.createCLAHE(clipLimit=0.8, tileGridSize=(2,2))
         cl1 = clahe.apply(frames[len(frames)-1])
 
@@ -293,19 +391,29 @@ def create_continuum_image(wd, frames, level, header, observer):
         # save as png
         cv2.imwrite(os.path.join(wd,'sunscan_cont.jpg'),apply_watermark_if_enable(cc//256,header,observer, 'Continuum'))
         cv2.imwrite(os.path.join(wd,'sunscan_cont.png'),cc)
+        create_solar_planisphere(os.path.join(wd,'sunscan_cont.png'))
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, raw, level, header, observer, name=None):
+def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
     """
     Create and save a prominence (protus) image of the sun.
     """
     height, width = raw.shape
-    center = (width // 2, height // 2)
+    
 
     print(name)
+    x0=cercle[0]
+    y0=cercle[1]
+    center = (x0, y0)
     # Create the circular mask
-    mask = create_circular_mask((height, width), center, 409, 3)
+    disk_limit_percent=0.002
+    wi=int(cercle[2])
+    he=int(cercle[3])
+    r=(min(wi,he))
+    r=int(r- round(r*disk_limit_percent))-4
+    
+    mask = create_circular_mask((height, width), center, r, 3)
 
     # Blend the images
     blended_image = blend_images(raw, np.zeros(raw.shape), mask)
@@ -335,7 +443,7 @@ def create_protus_image(wd, raw, level, header, observer, name=None):
     else:
         return cc
 
-def create_doppler_image(wd, frames, header, observer):
+def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
     """
     Create and save a Doppler image of the sun.
 
@@ -348,37 +456,107 @@ def create_doppler_image(wd, frames, header, observer):
     """
     if len(frames) >3:
         try :
-            img_doppler=np.zeros([frames[1].shape[0], frames[1].shape[1], 3],dtype='uint16')
+            img_doppler=np.zeros([frames[1].shape[0], frames[1].shape[1], 3],dtype='uint8')
 
-            f1=np.array(frames[2], dtype="float64")
-            f2=np.array(frames[1], dtype="float64")
-            moy=np.array(((f1+f2)/2), dtype='uint16')
+            f1=np.array(frames[1], dtype="float64")
+            f2=np.array(frames[2], dtype="float64")
+            moy=np.array(((f1+f2)/2), dtype='float64') 
+            # on equilibre les plans
+            lum_roi1 = get_lum_moyenne(f1) # calcul moyenne au centre sur zone de 200x200
+            lum_roi2 = get_lum_moyenne(f2)
+            lum_roimoy = get_lum_moyenne(moy)
+            ratio_l1 = lum_roimoy/lum_roi1
+            ratio_l2 = lum_roimoy/lum_roi2
+            frames[2] = np.clip(f2*ratio_l2, 0, 65535).astype( np.uint16)
+            frames[1] = np.clip(f1*ratio_l1, 0, 65535).astype( np.uint16) 
+            moy=np.array(moy, dtype='uint16')
+
+            
+            #i2,Seuil_haut, Seuil_bas=seuil_image(moy) # seuil bas = 0
+            Seuil_haut = np.percentile(moy, 99.99) # was 99.999
+            Seuil_bas=np.percentile(moy,5) # was zéra
+            i2= seuil_image_force (moy,Seuil_haut, Seuil_bas)
+            i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
+            i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
              
             i2,Seuil_haut, Seuil_bas=seuil_image(moy)
-            i1=seuil_image_force (frames[2],Seuil_haut, Seuil_bas)
-            i3=seuil_image_force(frames[1],Seuil_haut, Seuil_bas)
+            i1=seuil_image_force (frames[1],Seuil_haut, Seuil_bas)
+            i3=seuil_image_force(frames[2],Seuil_haut, Seuil_bas)
+
+            i1=np.clip(i1/256,0,255).astype(np.uint8)
+            i2=np.clip(i2/256,0,255).astype(np.uint8)
+            i3=np.clip(i3/256,0,255).astype(np.uint8)
             
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
             img_doppler=cv2.flip(img_doppler,0)
 
+            if doppler_color:
+                # BGR → HSV
+                hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
+                H, S, V = cv2.split(hsv)
+                
+                # Correction orange → plus rouge
+                mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
+                H[mask_orange] -= 20             # décale la teinte vers le rouge
+                                
+                # Correction bleu → plus bleu
+                mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
+                H[mask_blue] += 20 
+
+                H = np.clip(H, 0, 180)
+                S = np.clip(S, 0, 255) 
+                V = np.clip(V, 0, 255) 
+                
+                # Reconstruction
+                hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
+                img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+
             # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
+            create_solar_planisphere(os.path.join(wd,'sunscan_doppler.png'))
 
             print('create_protus_image eclipse doppler')
-            i1 = create_protus_image(wd, f2, 0, header, observer)
-            i2 = create_protus_image(wd, moy, 0, header, observer)
-            i3 = create_protus_image(wd, f1, 0, header, observer)
+            i1 = create_protus_image(wd, f2, cercle, 0, header, observer)
+            i2 = create_protus_image(wd, moy, cercle,0, header, observer)
+            i3 = create_protus_image(wd, f1, cercle, 0, header, observer)
+            
+            i1=np.clip(i1/256,0,255).astype(np.uint8)
+            i2=np.clip(i2/256,0,255).astype(np.uint8)
+            i3=np.clip(i3/256,0,255).astype(np.uint8)
+            
             img_doppler[:,:,0] = i1 # blue
             img_doppler[:,:,1] = i2 # green
             img_doppler[:,:,2] = i3 # red
+         
 
-            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler//256, header, observer))
+            if doppler_color:
+
+                # BGR → HSV
+                hsv = cv2.cvtColor(img_doppler, cv2.COLOR_RGB2HSV).astype(np.float32)
+                H, S, V = cv2.split(hsv)
+                
+                # Correction orange → plus rouge
+                mask_orange = (H > 5) & (H < 25)   # plage d'orange en degrés OpenCV (0-179) was 25
+                H[mask_orange] -= 20             # décale la teinte vers le rouge
+                                
+                # Correction bleu → plus bleu
+                mask_blue = (H > 90) & (H < 150)    # plage de bleu was 90
+                H[mask_blue] += 20 
+
+                H = np.clip(H, 0, 180)
+                S = np.clip(S, 0, 255) 
+                V = np.clip(V, 0, 255) 
+                
+                # Reconstruction
+                hsv_mod = cv2.merge([H, S, V]).astype(np.uint8)
+                img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
+                
+
+            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)
-
-
             
                 
         except Exception as e:
@@ -511,6 +689,7 @@ def Colorise_Image(color, frame_contrasted, wd, header, observer):
             img_color=im
         
         cv2.imwrite(os.path.join(wd,'sunscan_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        create_solar_planisphere(os.path.join(wd,'sunscan_color.jpg'))
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)
@@ -541,8 +720,4 @@ def get_fits_header(exp, gain):
 def mock_callback(serfile, status):
     print(f"mock_callback {serfile} {status}")
 if __name__ == '__main__':
-    #he I
-    process_scan("D:\sunscan\sample_data\storage\scans\\2025_01_17\\sunscan_2025_01_17-15_07_41\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
-    # halpha
-    #process_scan("D:\sunscan\sample_data\storage\scans\\2024_11_13\\sunscan-2024_09_21-16_21_59\\scan.ser", mock_callback, True, True, 1100, False, advanced='')
-    
+    process_scan("C:\\Users\\g-ber\\Downloads\\2025_09_21-07_50_05-scan.ser", mock_callback, True, True, 1100, False, advanced='halpha',observer=' ')

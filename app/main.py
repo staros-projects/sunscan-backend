@@ -48,13 +48,15 @@ from camera import *
 from power import factory_power_helper
 from camera_controller import CameraController
 
+from focus_analyzer import FocusAnalyzer
+
 from process import process_scan, get_fits_header
 from animate import *
 from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.3.2'
+BACKEND_API_VERSION = '1.4.3'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -77,6 +79,8 @@ class Scan(ScanBase):
     observer: str = ''
     description: str = ''
     advanced: str = ''
+    doppler_color: int 
+    process_doppler: bool
 
 class CameraControls(BaseModel):
     exp: float
@@ -445,6 +449,24 @@ async def toggleCrop(request: Request):
         app.cameraController.toggleCrop()
         return getCameraControls()
 
+@app.get("/camera/toggle-focus-assistant/", response_class=JSONResponse)
+async def toggleFocusAssistant(request: Request):
+    """
+    Toggle the camera's crop mode.
+    
+    This endpoint switches the camera's crop mode on or off. Cropping can be
+    useful for focusing on specific areas of interest in the image.
+    
+    Args:
+        request (Request): The incoming request object.
+    
+    Returns:
+        JSONResponse: The updated camera control settings after toggling crop mode.
+    """
+    if app.cameraController:
+        app.cameraController.toggleFocusAssistant()
+        return getCameraControls()
+
 @app.get("/camera/infos/", response_class=JSONResponse)
 async def infos(request: Request):
     """
@@ -741,7 +763,7 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
     """
     if (os.path.exists(scan.filename)):
         print(scan)
-        background_tasks.add_task(process_scan,serfile=scan.filename,callback=notifyScanProcessCompleted, autocrop=scan.autocrop, dopcont=scan.dopcont, autocrop_size=scan.autocrop_size, noisereduction=scan.noisereduction, dopplerShift=scan.doppler_shift, contShift=scan.continuum_shift, contSharpLevel=scan.cont_sharpen_level, surfaceSharpLevel=scan.surface_sharpen_level, proSharpLevel=scan.pro_sharpen_level, offset=scan.offset, observer=scan.observer, advanced=scan.advanced)
+        background_tasks.add_task(process_scan,callback=notifyScanProcessCompleted, scan=scan)
 
 
 @app.post("/sunscan/process/stack/")
@@ -759,48 +781,106 @@ def process_stack(request: PostProcessRequest):
     stack(request.paths, required_files, request.observer, request.patch_size, request.step_size, request.intensity_threshold)
     end_time = time.perf_counter()
     print(f" {end_time - start_time:.6f} secondes") 
-    
-     
+
 @app.post("/sunscan/process/animate/")
 def process_animate(request: PostProcessRequest):
     # Supported filenames and output GIF names
-
     gif_names = {
         "sunscan_clahe.png": "animated_clahe.gif",
+        "sunscan_negative.png": "animated_negative.gif",
         "sunscan_helium.png": "animated_helium.gif",
         "sunscan_helium_cont.png": "animated_helium_cont.gif",
         "sunscan_protus.png": "animated_protus.gif",
         "sunscan_cont.png": "animated_cont.gif",
     }
 
+    gif_names_stacking = {
+        "stacked_clahe_*_raw.png": "stacked_clahe_raw.gif",
+        "stacked_clahe_*_sharpen.png": "stacked_clahe_sharpen.gif",
+        "stacked_negative_*_raw.png": "stacked_negative.gif",
+        "stacked_negative_*_sharpen.png": "stacked_negative_sharpen.gif",
+        "stacked_helium_*_raw.png": "stacked_helium.gif",
+        "stacked_helium_*_sharpen.png": "stacked_helium_sharpen.gif",
+        "stacked_helium_cont_*_raw.png": "stacked_helium_cont.gif",
+        "stacked_helium_cont_*_sharpen.png": "stacked_helium_cont_sharpen.gif",
+        "stacked_protus_*_raw.png": "stacked_protus.gif",
+        "stacked_protus_*_sharpen.png": "stacked_protus_sharpen.gif",
+        "stacked_cont_*_raw.png": "stacked_cont.gif",
+        "stacked_cont_*_sharpen.png": "stacked_cont_sharpen.gif",
+    }
+
     gifs_created = []
 
     stacking_dir = './storage/animations'
-    if not os.path.exists(stacking_dir):
-        os.mkdir(stacking_dir)
+    os.makedirs(stacking_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     work_dir = os.path.join(stacking_dir, timestamp)
-    if not os.path.exists(work_dir):
-        os.mkdir(work_dir)
+    os.makedirs(work_dir, exist_ok=True)
 
-    # Check for each required file type and generate GIFs if possible
-    for required_file in gif_names.keys():
-        matching_paths = []
+    # Vérifier si on est en mode stacking
+    is_stacking_mode = any("stacking" in p for p in request.paths)
 
-        for path_str in request.paths:
-            path = Path(os.path.dirname(path_str)) / required_file
-            print(path)
+    if is_stacking_mode:
+        # MODE STACKING
+        for pattern, gif_name in gif_names_stacking.items():
+            regex_pattern = pattern.replace("*", r"(\d+)")  # transformer * en regex pour chiffres
+            regex = re.compile(regex_pattern)
 
-            if path.exists() or os.path.exists(path):
-                matching_paths.append(path)
+            matching_paths = []
 
-        print(matching_paths)
-        # Create GIF if all paths contain the required file
-        if len(matching_paths) == len(request.paths):
-            output_gif_path = os.path.join(work_dir, gif_names[required_file])
-            create_gif(matching_paths, request.watermark, request.observer, output_gif_path, request.frame_duration, request.display_datetime, request.resize_gif, request.bidirectional, request.add_average_frame)
-            gifs_created.append(str(output_gif_path))
+            # scanner tous les répertoires donnés
+            for path_str in request.paths:
+                directory = Path(path_str)
+                if not directory.exists():
+                    continue
+
+                for file in directory.glob("*.png"):
+                    if regex.fullmatch(file.name):
+                        matching_paths.append(file)
+
+            # si on a trouvé des fichiers correspondants → créer le GIF
+            if matching_paths:
+                output_gif_path = os.path.join(work_dir, gif_name)
+                create_gif(
+                    matching_paths,
+                    request.watermark,
+                    request.observer,
+                    output_gif_path,
+                    request.frame_duration,
+                    request.display_datetime,
+                    request.resize_gif,
+                    request.bidirectional,
+                    request.add_average_frame,
+                )
+                gifs_created.append(str(output_gif_path))
+
+    else:
+        # MODE CLASSIQUE
+        for required_file, gif_name in gif_names.items():
+            matching_paths = []
+
+            for path_str in request.paths:
+                path = Path(os.path.dirname(path_str)) / required_file
+
+                if path.exists():
+                    matching_paths.append(path)
+     
+            # Create GIF if all paths contain the required file
+            if len(matching_paths) == len(request.paths):
+                output_gif_path = os.path.join(work_dir, gif_name)
+                create_gif(
+                    matching_paths,
+                    request.watermark,
+                    request.observer,
+                    output_gif_path,
+                    request.frame_duration,
+                    request.display_datetime,
+                    request.resize_gif,
+                    request.bidirectional,
+                    request.add_average_frame,
+                )
+                gifs_created.append(str(output_gif_path))
 
     if not gifs_created:
         raise HTTPException(status_code=400, detail="No GIFs were created. Ensure the required files exist.")
@@ -873,6 +953,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     print("Socket is running...")
     try:
+        focus_analyzer = FocusAnalyzer(measure_every=5)
         # Infinite loop to handle continuous data streaming
         while True:
             # Check for notifications in the queue
@@ -886,7 +967,11 @@ async def websocket_endpoint(websocket: WebSocket):
     
                 if len(frame):
                     r = frame / 256
+                    edges = None
                     if not app.cameraController.isRecording():
+                        #if not app.cameraController.cameraIsCropped() :
+                        #    r = locateLines(r)
+                        
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
                             d = time.strftime("%Y_%m_%d")
@@ -916,6 +1001,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         if len(frame.shape) == 2 and app.cameraController.cameraIsCropped() :
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
                             await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
+
+                        # Send focus analyzer data
+                        edges = None
+                        if app.cameraController.focusAssistantIsOn() and not app.cameraController.isInColorMode():
+                            # Update focus measurement
+                            sharpness, edges = focus_analyzer.update(frame)
+                            await websocket.send_text('focus;#;'+str(sharpness)+';#;'+str(0)+';#;'+str(edges[0])+';#;'+str(edges[1]))
                     
                     # Apply normalization if enabled
                     if app.cameraController.normalizeMode()==1:    
@@ -923,6 +1015,19 @@ async def websocket_endpoint(websocket: WebSocket):
                     else:
                         max_threshold = app.cameraController.getMaxVisuThreshold()
                         r = (r * 256) / max_threshold
+
+                    # Rescale edges if they exist
+                    if edges:
+
+                        # Compute resize ratios
+                        scale_x = r.shape[1] / frame.shape[1]   # width ratio
+                        scale_y = r.shape[0] / frame.shape[0]   # height ratio, usually 1D profile so can ignore
+
+                        edges_scaled = (
+                            int(edges[0] * scale_x - 10) if edges[0] is not None else None,
+                            int(edges[1] * scale_x + 10) if edges[1] is not None else None
+                        )
+                        r = FocusAnalyzer.overlay_edges(r.copy(), edges_scaled)
                     
                     # Encode and send the frame
                     byte_im = cv2.imencode('.jpg', r)[1].tobytes()

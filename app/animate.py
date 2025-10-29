@@ -24,20 +24,22 @@ class PostProcessRequest(BaseModel):
     step_size: int = 10 
     intensity_threshold: int = 0
 
-def extract_datetime_from_path(image_path: str) -> str:
+def extract_datetime_from_path(image_path: str, date_format: str = "%Y_%m_%d-%H_%M_%S") -> str:
     """
-    Extract the datetime (YYYY_MM_DD-HH_MM_SS) from the image path.
+    Extract the datetime from the image path using the given format.
+    Example default format: "%Y_%m_%d-%H_%M_%S"
     """
     path = Path(image_path)
-    # Assuming the datetime is always in the folder name before the image name
     folder_name = path.parent.name
-    # Assuming the format is YYYY_MM_DD-HH_MM_SS, we will split and reformat it
-    date_part, time_part = folder_name.split('-')
-    sunscan, year, month, day = date_part.split('_')
-    hour, minute, second = time_part.split('_')
-    # Return the formatted datetime: YYYY/MM/DD HH:MM:SS
-    return f"{year}/{month}/{day} {hour}:{minute}:{second} UT"
 
+    try:
+        # Convertir en datetime avec le format donné
+        dt = datetime.strptime(folder_name, date_format)
+    except ValueError as e:
+        raise ValueError(f"Folder name '{folder_name}' does not match expected format '{date_format}'") from e
+
+    # Retourne la date/heure formatée (exemple: "2025/10/01 15:42:18 UT")
+    return dt.strftime("%Y/%m/%d %H:%M:%S UT")
 
 def add_datetime_to_frame(image: Image.Image, datetime_str: str) -> Image.Image:
     """
@@ -91,7 +93,11 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
         image = image // 256
         frame = Image.fromarray(image).convert("RGB")
         # Extract the datetime from the path and format it
-        datetime_str = extract_datetime_from_path(str(image_path))
+        if ("stacking" in str(image_path)):
+            datetime_str = extract_datetime_from_path(str(image_path), "%Y-%m-%d_%H-%M-%S")
+            output_path = output_path.replace("stacked", 'animated')
+        else:
+            datetime_str = extract_datetime_from_path(str(image_path), "sunscan_%Y_%m_%d-%H_%M_%S")
         if display_datetime:
             tag = get_scan_tag(os.path.dirname(image_path))
             txt = datetime_str if not tag else datetime_str+" - "+tag
@@ -142,7 +148,7 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
             dither=True
         )
         print(f"Preview GIF saved at {preview_output_path}")
-
+        
     frames[0].save(
         output_path,
         save_all=True,

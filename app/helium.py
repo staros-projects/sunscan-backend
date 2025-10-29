@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import os
 import cv2
+from mapping import create_solar_planisphere
 
 def seuil_image_force (img, Seuil_haut, Seuil_bas):
     img[img>Seuil_haut]=Seuil_haut
@@ -104,7 +105,7 @@ def blend_images(cc, result_image, mask):
 
     return blended_image
 
-def process_and_save_images(cc, result_image, output_dir, name, watermark_fct, header, observer, desc):
+def process_and_save_images(cc, result_image, cercle, output_dir, name, watermark_fct, header, observer, desc):
     """
     Process and save the blended image with a circular mask.
 
@@ -119,17 +120,23 @@ def process_and_save_images(cc, result_image, output_dir, name, watermark_fct, h
         blended_image (numpy.ndarray): The blended image (16-bit).
     """
     height, width = cc.shape
-    center = (width // 2, height // 2)
-    radius=390
     feather_width=15
 
+    x0=cercle[0]
+    y0=cercle[1]
+    center = (x0, y0)
     # Create the circular mask
-    mask = create_circular_mask((height, width), center, radius, feather_width)
+    disk_limit_percent=0.002
+    wi=int(cercle[2])
+    he=int(cercle[3])
+    r=(min(wi,he))
+    r=int(r- round(r*disk_limit_percent))-18
+
+    # Create the circular mask
+    mask = create_circular_mask((height, width), center, r, feather_width)
 
     # Blend the images
     blended_image = blend_images(cc, result_image, mask)
-
-
 
     # Save the final blended image
     cv2.imwrite(os.path.join(output_dir,name+'.jpg'), watermark_fct(blended_image//256,header,observer, desc))
@@ -155,7 +162,7 @@ def adjust_histogram(image):
 
     return adjusted_image.astype(np.uint16)
 
-def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Image):
+def process_helium(WorkDir, frames, cercle, header, observer, watermark_fct, Colorise_Image):
 
     fr1=np.copy(frames[1])
     fr2=np.copy(frames[2])
@@ -202,8 +209,8 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Im
     result_image = (result_image / max_value) * 65535.0
     result_image = result_image.astype(np.uint16)
 
-    res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
-
+    res = process_and_save_images(cc, result_image, cercle, WorkDir, 'sunscan_helium', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
+    create_solar_planisphere(os.path.join(WorkDir,'sunscan_helium.png'))
 
 
     coef = 0.6
@@ -213,9 +220,9 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Im
     result_image = (result_image / max_value) * 65535.0
     result_image = result_image.astype(np.uint16)
 
-    res = process_and_save_images(cc, result_image, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
+    res = process_and_save_images(cc, result_image, cercle, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
     Colorise_Image('heI', res, WorkDir, header, observer)
-    
+    create_solar_planisphere(os.path.join(WorkDir,'sunscan_helium_cont.png'))
     coef = 0.6
     result_image = image1 + coef * image2_transformed
     result_image = np.clip(result_image, 0, 65535).astype(np.uint16)
@@ -231,6 +238,7 @@ def process_helium(WorkDir, frames, header, observer, watermark_fct, Colorise_Im
     cont_image = watermark_fct(moy//256, header, observer, 'Continuum')
     cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.png'),moy)
     cv2.imwrite(os.path.join(WorkDir, 'sunscan_cont.jpg'),cont_image)
+    create_solar_planisphere(os.path.join(WorkDir,'sunscan_cont.png'))
     
     # Create and save a smaller preview image
     ccsmall = cv2.resize(res/256,  (0,0), fx=0.4, fy=0.4) 

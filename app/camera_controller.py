@@ -33,6 +33,7 @@ class CameraController:
         self._camera_status = "disonnected"
         self._camera = camera
         self._bin = False
+        self._focus_assistant = False
 
         self._record = False
 
@@ -55,7 +56,7 @@ class CameraController:
         Initialize camera settings and calculate crop parameters.
         """
         self._sensor_size = self._camera.init()
-        self._crop_height = 280
+        self._crop_height = 260
         self._crop_y = int((self._sensor_size[1] / 2) - (self._crop_height / 2))
         self._preview_crop_height = 2000 
         self._preview_crop_y = int((self._sensor_size[1] / 2) - (self._preview_crop_height / 2))
@@ -184,6 +185,7 @@ class CameraController:
                 'preview_crop_y': self._preview_crop_y,
                 'preview_crop_height': self._preview_crop_height,
                 'monobin_mode': self._monobin_mode,
+                'focus_assistant': self._focus_assistant,
                 'bin': self._bin,
                 'monobin':self._monobin, 
                 'camera':self._camera.getName()}
@@ -216,6 +218,13 @@ class CameraController:
         self._crop = not self._crop
         self._camera.updateCameraControls(self.getCameraControls())
 
+    def toggleFocusAssistant(self):
+            """
+            Toggle focus assistant.
+            """
+            self._focus_assistant = not self._focus_assistant
+            self._camera.updateCameraControls(self.getCameraControls())
+
     def toggleNormalize(self, mode):
         """
         Toggle image normalization.
@@ -230,6 +239,9 @@ class CameraController:
         :return: Boolean indicating normalization status
         """
         return self._normalize
+
+    def focusAssistantIsOn(self):
+        return self._focus_assistant
 
     def cameraIsCropped(self):
         """

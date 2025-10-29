@@ -89,7 +89,7 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
         os.mkdir(path)
         
     scans = []
-    regex = r"stacked_(helium|helium_cont|clahe|cont|protus)_(\d)_(raw|sharpen).png"
+    regex = r"stacked_(helium|helium_cont|negative|clahe|cont|protus)_(\d)_(raw|sharpen).png"
     for root, dirs, files in os.walk(path, topdown=False):
         stacking_dirname = None
         images = []
@@ -101,6 +101,8 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
                     stacking_dirname = os.path.dirname(file_path)
                     cti = int(os.path.getmtime(stacking_dirname))
 
+                    if "stacked_negative" in file_path:
+                        images.append(file_path)
                     if "stacked_clahe" in file_path:
                         images.append(file_path)
                     elif "stacked_cont" in file_path:
@@ -136,6 +138,8 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
 
                     if "helium" in file_path:
                         images.append(file_path)
+                    elif "negative" in file_path:
+                        images.append(file_path)
                     elif "clahe" in file_path:
                         images.append(file_path)
                     elif "cont" in file_path:
@@ -155,7 +159,8 @@ def get_scans(path='storage/scans/', withDetails=False):
         os.mkdir(path)
         
     scans = []
-    images_type = {'clahe':'Clahe + Unsharp mask',
+    images_type = { 'clahe':'Clahe + Unsharp mask',
+                    'negative':'Negative clahe + Unsharp mask',
                     'helium_cont': 'Helium + Continuum',
                     'helium': 'Helium',
                     'protus':'Artificial eclipse : Clahe + Unsharp mask',
@@ -183,7 +188,7 @@ def get_scans(path='storage/scans/', withDetails=False):
                             ti_m = os.path.getmtime(path)
                             images[im] = [im_desc, os.path.exists(p), ti_m]
                                 
-                    scans.append({'path':ser_dirname, 'ser':ser_path, 'images':images, 'status':'pending', 'creation_date':cti})
+                    scans.append({'path':ser_dirname, 'ser':ser_path, 'images':images, 'status':'pending', 'creation_date':cti, 'planispheres':[]})
     scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
 
     scans_with_status = []
@@ -193,6 +198,12 @@ def get_scans(path='storage/scans/', withDetails=False):
         elif os.path.exists(os.path.join(s['path'],'sunscan_log.txt')):
             s['status'] = 'failed'
 
+        for suffix in ["clahe", "negative", "color", "doppler", "cont", "helium_cont", "helium"]:
+            fname = f"sunscan_{suffix}_proj.jpg"
+            fpath = os.path.join(s["path"], fname)
+            if os.path.exists(fpath):
+                s["planispheres"].append(fpath)
+         
         # Check for tag_ file and set s['tag'] accordingly
         s['tag'] = ''
         tag_files = [f for f in os.listdir(s['path']) if f.startswith('tag_')]
@@ -252,7 +263,7 @@ def get_available_size(path="/"):
         dict: A dictionary containing total, used, and free disk space in formatted strings.
     """
     du = psutil.disk_usage(path)
-    return {"total":sizeof_fmt(du.total),"used":sizeof_fmt(du.used),"free":sizeof_fmt(du.free)}
+    return {"total":sizeof_fmt(du.total),"used":sizeof_fmt(du.used),"free_raw":du.free,"free":sizeof_fmt(du.free)}
 
 if __name__ == '__main__':
     print(get_available_size())
