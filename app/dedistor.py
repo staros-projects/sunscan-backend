@@ -9,8 +9,9 @@ from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
-from process import sharpenImage, get_text_position, create_protus_image, create_negative_surface_image
+from process import Colorise_Image, sharpenImage, get_text_position, create_protus_image, create_negative_surface_image
 from storage import get_scan_tag
+from config import LineDict
 
 from Inti_functions import detect_edge, fit_ellipse
 
@@ -300,7 +301,7 @@ def apply_watermark_if_enable(frame, text, observer):
     return np.array(image)
 
 
-def write_images(work_dir, sum_image, type, scan_count, text, observer, tag):
+def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag):
     sum_image = sum_image / scan_count
     sum_image = sum_image.astype(np.uint16)
 
@@ -309,11 +310,11 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer, tag):
         sum_image = (sum_image / max_value) * 65535.0
     sum_image = sum_image.astype(np.uint16)
 
-    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
-    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
+    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
+    cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
     sum_image2 = sharpenImage(sum_image, 1 if scan_count<8 else 2)
-    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.png'), sum_image2, format="png")
-    cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image2//256,text,observer))
+    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_sharpen.png'), sum_image2, format="png")
+    cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image2//256,text,observer))
     
 
 
@@ -322,23 +323,37 @@ def write_images(work_dir, sum_image, type, scan_count, text, observer, tag):
     #     cv2.imwrite(os.path.join(work_dir, 'stacked_protus'+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(cc//256,text,observer))
 
     ccsmall = cv2.resize(sum_image2/256,  (0,0), fx=0.4, fy=0.4)    
-    cv2.imwrite(os.path.join(work_dir, 'stacked_'+type+'_preview.jpg'),ccsmall)
+    cv2.imwrite(os.path.join(work_dir, 'stacked_'+im_type+'_preview.jpg'),ccsmall)
 
     tag_enabled_for_negative = ['halpha', 'hbeta', 'hgamma', 'hdelta', 'hepsilon']
+    label_enabled_for_negative = []
+    for t in tag_enabled_for_negative:
+        l = LineDict[t]
+        label_enabled_for_negative.append(l)
 
-    if type == 'clahe' and tag in tag_enabled_for_negative:
-        X = detect_edge(sum_image, zexcl=0.1, crop=0, disp_log=False)
-        EllipseFit,XE=fit_ellipse(sum_image, X, disp_log=False)
-        xc=round(EllipseFit[0][0])
-        yc=round(EllipseFit[0][1])
-        wi=round(EllipseFit[1]) # diametre
-        he=round(EllipseFit[2])
-        cercle=[xc,yc,wi,he]  
-        type = 'negative'
-        text = text.replace('stacked images', 'stacked negative images')
-        n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, return_image=True)
-        imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.png'), n, format="png")
-        cv2.imwrite(os.path.join(work_dir,'stacked_'+type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
+    if im_type == 'clahe':
+        for (k,v) in LineDict.items():
+            if v == tag:
+                color = k
+                print('stack color image generation ', text, observer)
+                Colorise_Image(color, sum_image, work_dir, text, observer, False, 'stacked_color_'+str(scan_count)+'_raw')
+                Colorise_Image(color, sum_image, work_dir, text, observer, False, 'stacked_color_'+str(scan_count)+'_sharpen')
+                break
+
+        if tag in label_enabled_for_negative:
+            X = detect_edge(sum_image, zexcl=0.1, crop=0, disp_log=False)
+            EllipseFit,XE=fit_ellipse(sum_image, X, disp_log=False)
+            xc=round(EllipseFit[0][0])
+            yc=round(EllipseFit[0][1])
+            wi=round(EllipseFit[1]) # diametre
+            he=round(EllipseFit[2])
+            cercle=[xc,yc,wi,he]  
+            im_type = 'negative'
+            text = text.replace('stacked images', 'stacked negative images')
+            n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, return_image=True)
+            imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.png'), n, format="png")
+            cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
+
 
 
     

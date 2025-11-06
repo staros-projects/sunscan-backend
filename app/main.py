@@ -56,7 +56,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.4.3'
+BACKEND_API_VERSION = '1.4.4'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -807,6 +807,8 @@ def process_animate(request: PostProcessRequest):
         "stacked_protus_*_sharpen.png": "stacked_protus_sharpen.gif",
         "stacked_cont_*_raw.png": "stacked_cont.gif",
         "stacked_cont_*_sharpen.png": "stacked_cont_sharpen.gif",
+        # "stacked_color_*_raw.jpg": "stacked_cont.gif",
+        # "stacked_color_*_sharpen.jpg": "stacked_cont_sharpen.gif",
     }
 
     gifs_created = []

@@ -246,7 +246,7 @@ def create_surface_image(wd, frames, helium, level, header, observer, color, cer
     return raw
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
-    print('watermark', observer, desc)
+    print('- watermark : ', observer, desc)
     if observer == ' ':
         return frame
     # Ensure the frame is in uint8 format
@@ -268,6 +268,8 @@ def apply_watermark_if_enable(frame, header, observer, desc=''):
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Roboto-Regular.ttf", 30)  # Use a specific font if available
     text_position = get_text_position(image)
     desc = ' - ' + desc if desc else ''
+    if desc == '' and isinstance(header, str) and header != '':
+        desc = header
     draw.text(text_position, formatted_date+desc, fill="white", font=font)
 
     font = ImageFont.truetype("/var/www/sunscan-backend/app/fonts/Baumans-Regular.ttf", 40)  # Use a specific font if available
@@ -635,7 +637,7 @@ def adjust_gamma(image, gamma=1.0):
 	# apply gamma correction using the lookup table
 	return cv2.LUT(image, table)
 
-def Colorise_Image(color, frame_contrasted, wd, header, observer):
+def Colorise_Image(color, frame_contrasted, wd, header, observer, planisphere=True, filename='sunscan_color'):
     if not color:
         return
     
@@ -688,8 +690,9 @@ def Colorise_Image(color, frame_contrasted, wd, header, observer):
         else:
             img_color=im
         
-        cv2.imwrite(os.path.join(wd,'sunscan_color.jpg'),apply_watermark_if_enable(img_color, header, observer))
-        create_solar_planisphere(os.path.join(wd,'sunscan_color.jpg'))
+        cv2.imwrite(os.path.join(wd,filename+'.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        if planisphere:
+            create_solar_planisphere(os.path.join(wd,filename+'.jpg'))
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)

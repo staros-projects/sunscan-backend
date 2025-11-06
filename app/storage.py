@@ -103,6 +103,8 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
 
                     if "stacked_negative" in file_path:
                         images.append(file_path)
+                    if "stacked_color" in file_path:
+                        images.append(file_path)
                     if "stacked_clahe" in file_path:
                         images.append(file_path)
                     elif "stacked_cont" in file_path:
@@ -143,6 +145,8 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
                     elif "clahe" in file_path:
                         images.append(file_path)
                     elif "cont" in file_path:
+                        images.append(file_path)
+                    elif "color" in file_path:
                         images.append(file_path)
                     elif "protus" in file_path:
                         images.append(file_path)
