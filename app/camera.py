@@ -257,10 +257,8 @@ class IMX477Camera_CSI_rpi5(BaseIMX477Camera_CSI):
         """
         raw_array = self._picam2.capture_array('raw').view(np.uint16)
 
-        # Extract the 12 most significant bits
-        raw_array_12bit = raw_array >> 4
-
-        return raw_array_12bit.astype(np.uint16)
+        # Extract the 12 most significant bits (>> on uint16 already yields uint16)
+        return raw_array >> 4
 
 
 

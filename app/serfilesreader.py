@@ -18,8 +18,9 @@
     To be quick : this library can only be used by free/open softwares GPL compas.
 """
 
+import os
 import numpy as np
-import cv2, copy   
+import cv2, copy
 from astropy.io import fits
 
  
@@ -135,9 +136,10 @@ class Serfile():
             header (dict, optional): Header information for a new file. Defaults to None.
         """
         self._nameOfSerfile = name_of_serfile
-        
+
         self._debug = True
         self._trail = []
+        self._write_file = None  # persistent handle used by addFrame during recording
         if not NEW : 
             "" if self.testFile(self._nameOfSerfile) else self.quit()
             self._header, readOk, trail = self._readExistingHeader()
@@ -706,29 +708,50 @@ class Serfile():
         """
         Add a new frame to the SER file.
 
+        Optimized for sequential recording: keeps a persistent buffered file
+        handle open between calls (see closeWriteFile()) and avoids re-reading
+        the frame or the header from disk after each write.
+
         Args:
             frame (numpy.ndarray): The frame to add.
 
         Raises:
             IndexError: If the frame dimensions do not match the existing frames.
         """
-        try : 
+        try :
             if self._header['FrameCount']==0 : #first frame
                 self._updateHeader('ImageHeight',frame.shape[0])
                 self._updateHeader('ImageWidth',frame.shape[1])
                 self._height = self._header.get('ImageHeight')
                 self._width = self._header.get('ImageWidth')
                 self._frameDimension = self._height * self._width
-            ### TODO : vérfiier taille de l'image 
-            with open(self._nameOfSerfile, 'r+b',0) as _file : 
-                _file.seek(178+self._cursor*self._frameDimension*self._bytesPerPixels)
-                _file.write(frame)
-                self.setCurrentPosition(self._cursor+1)
-                self._length = self._length+1
-                self._updateHeader('FrameCount', self._length)
-        
+            ### TODO : vérfiier taille de l'image
+            if self._write_file is None:
+                self._write_file = open(self._nameOfSerfile, 'r+b')
+            _file = self._write_file
+            _file.seek(178+self._cursor*self._frameDimension*self._bytesPerPixels)
+            _file.write(frame)
+            self._cursor += 1
+            self._length += 1
+            # keep FrameCount up to date on disk (4 bytes at offset 38) without
+            # reopening the file or re-parsing the whole header
+            _file.seek(38)
+            _file.write(np.uint32(self._length).tobytes())
+            self._header['FrameCount'] = self._length
+
         except IndexError:
                 raise IndexError("tuple index out of range, may be Width and height are false. Shape :  %s"%(frame.shape))
+
+    def closeWriteFile(self):
+        """
+        Flush and close the persistent write handle used by addFrame().
+        Must be called when recording stops, before the file is read back.
+        """
+        if self._write_file is not None:
+            self._write_file.flush()
+            os.fsync(self._write_file.fileno())
+            self._write_file.close()
+            self._write_file = None
             
     
     def setImageHeight(self, height):

@@ -68,14 +68,18 @@ class CameraController:
         print('Thread camera is running...')
         while(self._running):
             self._frame = self._camera.capture(self._record)  # Capture a frame from the camera
-            if not self.isInColorMode():  # Check if the camera is not in color mode
-                if self._record:  # Check if recording is active
-                    if not self._serfile_object:  # If SER file object doesn't exist
-                        self._initSerFile()  # Initialize a new SER file
-                        self._t0 = time.time()  # Set the start time for recording
-                    self._time_in_progress = time.time()  # Update the current time
-                    self._serfile_object.addFrame(self._frame)  # Add the captured frame to the SER file
-                    self._fc+=1  # Increment the frame count
+            if self._record and not self.isInColorMode():  # Recording active and camera in mono mode
+                if not self._serfile_object:  # If SER file object doesn't exist
+                    self._initSerFile()  # Initialize a new SER file
+                    self._t0 = time.time()  # Set the start time for recording
+                self._time_in_progress = time.time()  # Update the current time
+                self._serfile_object.addFrame(self._frame)  # Add the captured frame to the SER file
+                self._fc+=1  # Increment the frame count
+            elif self._serfile_object:
+                # recording just stopped: flush and close the SER file from the
+                # capture thread to avoid racing with an in-flight addFrame
+                self._serfile_object.closeWriteFile()
+                self._serfile_object = None
 
        
     def isRecording(self):
@@ -280,10 +284,17 @@ class CameraController:
     def stopRecord(self):
         """
         Stop recording frames and print recording statistics.
+
+        Blocks (with a timeout) until the capture thread has flushed and
+        closed the SER file, so callers can safely read it afterwards.
         """
         self._record = False
+        deadline = time.time() + 10
+        while self._serfile_object is not None and time.time() < deadline:
+            time.sleep(0.05)
         print(self._fc,self._time_in_progress,self._t0)
-        print(f"frame count : {self._fc} time:{self._time_in_progress-self._t0} fps:{self._fc/(self._time_in_progress-self._t0)}")
+        if self._time_in_progress > self._t0:
+            print(f"frame count : {self._fc} time:{self._time_in_progress-self._t0} fps:{self._fc/(self._time_in_progress-self._t0)}")
         return self._final_ser_filename
 
     def _initSerFile(self):
