@@ -22,6 +22,10 @@ import config as cfg
 
 
 """
+modif SUNSCAN du 17 sept 2026 - acceleration sans changement des resultats
+- detect_edge et circularise2 traitent toutes les lignes en une fois
+- ajout SER_sum_frames et SER_extract_raie, lecture du fichier ser par blocs de trames
+
 version du 13 janvier 2024
 - modif autocrop padding a droite
 
@@ -361,15 +365,26 @@ def circularise2 (img,iw,ih,ratio): #methode par fit ellipse préalable
     newiw=int(iw*ratio)
     
     #on cacule la nouvelle image reinterpolée
-    NewImg=[]
-    for j in range(0,ih):
-        y=img[j,:]
-        x=np.arange(0,newiw+1,ratio)
-        x=x[:len(y)]
-        xcalc=np.arange(0,newiw)
-        f=interp1d(x,y,kind='linear',fill_value="extrapolate")
-        ycalc=f(xcalc)
-        NewImg.append(ycalc)
+    # toutes les lignes sont interpolees en une fois, avec le meme calcul que
+    # interp1d(x,y,kind='linear',fill_value="extrapolate") ligne par ligne
+    img=np.asarray(img)
+    x=np.arange(0,newiw+1,ratio)
+    x=x[:img.shape[1]]
+    xcalc=np.arange(0,newiw)
+
+    # points x de part et d'autre de chaque xcalc
+    hi=np.searchsorted(x,xcalc).clip(1,len(x)-1)
+    lo=hi-1
+    y_lo=img[:ih,lo]
+    y_hi=img[:ih,hi]
+    if not np.issubdtype(img.dtype, np.inexact) :
+        y_lo=y_lo.astype('float64')
+        y_hi=y_hi.astype('float64')
+
+    # pente entre les deux points puis valeur en xcalc
+    NewImg=(y_hi-y_lo)/(x[hi]-x[lo])
+    NewImg*=(xcalc-x[lo])
+    NewImg+=y_lo
     
     return NewImg, newiw
 
@@ -458,15 +473,13 @@ def detect_edge (myimg,zexcl, crop, disp_log):
     ze2=ze 
 
 
-    for i in range(y1+ze1,y2-ze2):
-        li=np.copy(img_c[i,:-5])
-        #myli=np.copy(img_c[i,:-5])
-        #myli=np.copy(img_c[i,:-5])
+    # toutes les lignes de y1+ze1 a y2-ze2 sont traitees en une fois (axis=1)
+    # meme calcul que ligne par ligne donc memes points de bord, mais beaucoup plus rapide
+    li=np.copy(img_c[y1+ze1:y2-ze2,:-5])
         
-        
+    if li.shape[0]!=0 :
         #method detect_bord same as flat median
-        offset=0
-        b=np.percentile(li,97)
+        b=np.percentile(li,97,axis=1)
         bb=b*0.7 #retour à 0.7 sinon accroche sur zones trop noires
         
         
@@ -479,50 +492,31 @@ def detect_edge (myimg,zexcl, crop, disp_log):
         #bb=b
         #print("seuil edge : ", b," ",bb)
 
-        li[li>bb]=bb
-        li=gaussian_filter1d(li, 2)
+        # li[li>bb]=bb avec un seuil bb par ligne
+        np.copyto(li, bb[:,None], where=li>bb[:,None], casting='unsafe')
+        li=gaussian_filter1d(li, 2, axis=1)
         #li[li<4000]=30
         #li_med=median_filter(li,size=50)
-        li_filter=gaussian_filter1d(li, 11)
-        li_gr=np.gradient(li_filter)
+        li_filter=gaussian_filter1d(li, 11, axis=1)
+        li_gr=np.gradient(li_filter, axis=1)
         #li_gr=np.gradient(li_med)
         
         
-        x1li=li_gr.argmax()
-        x2li=li_gr.argmin()
-
-        
-        if 2==1 :
-            if i in range(y1+ze1+3, y1+ze1+5) :
-            #if x1 <2500 :
-                plt.plot(li)
-                plt.title('Profil ligne '+str(i))
-                plt.show()
-                #plt.plot(li_med)
-                #plt.title('Median Profil ligne '+str(i))
-                #plt.show()
-                plt.plot(li_gr)
-                plt.title('Gradient Profil ligne '+str(i))
-                plt.show()
-        
-
-
+        x1li=li_gr.argmax(axis=1)
+        x2li=li_gr.argmin(axis=1)
         
         #x_argsort=li_gr.argsort()
         
-        if x1li==0 or x2li==0 :
-            pass
-        else:
-            s=np.array([x1li,x2li])
+        # garde les lignes ou les deux bords sont trouves et assez ecartes
+        ok=(x1li!=0) & (x2li!=0) & ((x2li-x1li) > (x2-x1)/2)
             
-            if s.size !=0 and (s[-1]-s[0])> (x2-x1)/2:
-                c_x1=s[0]+offset
-                c_x2=s[-1]-offset
-                bord_gauche.append(c_x1)
-                bord_gaucheY.append(i)
-                bord_droit.append(c_x2)
-                bord_droitY.append(i)
-                k=k+1
+        # les y doivent rester des entiers python comme avant (tolist), avec des entiers
+        # numpy le y**6 du polynome de degre 6 plus bas deborde en int64
+        bord_gauche=list(x1li[ok])
+        bord_droit=list(x2li[ok])
+        bord_gaucheY=np.arange(y1+ze1,y2-ze2)[ok].tolist()
+        bord_droitY=list(bord_gaucheY)
+        k=len(bord_gauche)
    
     bords=[bord_gauche, bord_droit]
     bordsY=[bord_gaucheY, bord_droitY] 
@@ -1071,5 +1065,110 @@ def pic_histo (frame) :
     return seuil_haut
     
     
+def SER_layout (scan):
+    # type des pixels et taille en octets d'une trame du fichier ser
+    # memes regles que Serfile.readFrameAtPos
+    hdr_ser=scan.getHeader()
+    if hdr_ser['PixelDepthPerPlane']==8 :
+        pix_type=np.dtype('uint8')
+    else :
+        pix_type=np.dtype('uint16')
+
+    if hdr_ser['ColorID']<=19 :
+        nb_plans=1
+    else :
+        nb_plans=3
+    if hdr_ser['PixelDepthPerPlane']<=8 :
+        frame_size=scan.getWidth()*scan.getHeight()*nb_plans
+    else :
+        frame_size=scan.getWidth()*scan.getHeight()*2*nb_plans
+
+    return pix_type, frame_size
     
+
+def SER_sum_frames (serfile, scan, first_frame, bloc=32, progress=None):
+    # somme des trames du fichier ser a partir de la trame first_frame
+    # les trames entierement a zero ne sont pas prises en compte
+    # un seul open et lecture par blocs de trames, donne exactement la meme somme
+    # que trame par trame avec readFrameAtPos mais beaucoup plus rapide
+    # retourne la somme en uint64 (trame non tournee) et le nombre de trames sommees
+    # progress, optionnel, est appele apres chaque bloc avec la fraction de trames lues
+    Width=scan.getWidth()
+    Height=scan.getHeight()
+    FrameCount=scan.getLength()
+    pix_type, frame_size=SER_layout(scan)
+
+    somme=np.zeros((Height,Width),dtype='uint64')
+    nb_trames=0
+    tampon=bytearray(bloc*frame_size)
+
+    with open(serfile,'rb') as file:
+        file.seek(178+first_frame*frame_size)
+        for i in range(first_frame,FrameCount,bloc):
+            n=min(bloc,FrameCount-i)
+            vue=memoryview(tampon)[:n*frame_size]
+            if file.readinto(vue)!=n*frame_size :
+                raise IOError('Fichier SER tronque : '+serfile)
+            trames=np.frombuffer(vue,dtype=pix_type).reshape(n,-1)[:,:Width*Height]
+            non_nulle=trames.any(axis=1)
+            if not non_nulle.all() :
+                trames=trames[non_nulle]
+            # somme du bloc en uint32, pas de depassement possible avec 32 trames 16 bits
+            somme=somme+trames.sum(axis=0,dtype='uint32').reshape(Height,Width)
+            nb_trames=nb_trames+int(non_nulle.sum())
+            if progress is not None :
+                progress((i+n-first_frame)/(FrameCount-first_frame))
+
+    return somme, nb_trames
+
+
+def SER_extract_raie (serfile, scan, Disk, ind_l, ind_r, left_weights, right_weights, flag_rotate, factor, first_frame, bloc=64, progress=None):
+    # extrait l'intensite de la raie de chaque trame a partir de first_frame et remplit
+    # les tableaux de Disk (un par decalage), une colonne par trame
+    # meme interpolation entre les colonnes ind_l et ind_r que trame par trame
+    # mais vectorisee sur un bloc de trames
+    # progress, optionnel, est appele apres chaque bloc avec la fraction de trames traitees
+    Width=scan.getWidth()
+    Height=scan.getHeight()
+    FrameCount=scan.getLength()
+    pix_type, frame_size=SER_layout(scan)
+
+    if flag_rotate:
+        # np.rot90 : img[y,x] = trame[x,Width-1-y]
+        # la colonne de la raie est une ligne du capteur, on ne lit dans le fichier
+        # que la bande de lignes r0 a r1 utile pour tous les decalages
+        r0=min([int(np.min(ind)) for ind in ind_l])
+        r1=max([int(np.max(ind)) for ind in ind_r])
+        lig_l=[ind-r0 for ind in ind_l]
+        lig_r=[ind-r0 for ind in ind_r]
+        col_l=[(Width-1)-np.arange(Width)]*len(ind_l)
+        col_r=col_l
+    else:
+        r0=0
+        r1=Height-1
+        lig_l=[np.arange(Height)]*len(ind_l)
+        lig_r=lig_l
+        col_l=ind_l
+        col_r=ind_r
+
+    bande=np.empty((bloc,r1-r0+1,Width),dtype=pix_type)
+
+    with open(serfile,'rb') as file:
+        for i in range(first_frame,FrameCount,bloc):
+            n=min(bloc,FrameCount-i)
+            for j in range(0,n):
+                file.seek(178+(i+j)*frame_size+r0*Width*pix_type.itemsize)
+                if file.readinto(memoryview(bande[j]).cast('B'))!=bande[j].nbytes :
+                    raise IOError('Fichier SER tronque : '+serfile)
+            trames=bande[:n]
+            if factor!=1 :
+                trames=trames.astype('uint16')*factor
+
+            for k in range(0,len(Disk)):
+                left_col=trames[:,lig_l[k],col_l[k]]
+                right_col=trames[:,lig_r[k],col_r[k]]
+                Disk[k][:,i:i+n]=(left_col*left_weights+right_col*right_weights).T
+
+            if progress is not None :
+                progress((i+n-first_frame)/(FrameCount-first_frame))
 

@@ -51,6 +51,7 @@ from camera_controller import CameraController
 from focus_analyzer import FocusAnalyzer
 
 from process import process_scan, get_fits_header
+from scan_progress import ScanProgress, scan_key
 from animate import *
 from dedistor import *
  
@@ -112,6 +113,9 @@ origins = [
 
 # Initialize a queue for inter-thread communication
 app.q = queue.Queue()
+
+# Processing progress of the scans, written by the processing threads and sent by the WebSocket
+app.scanProgress = ScanProgress()
 
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(
@@ -650,20 +654,40 @@ async def takeSnapShot(request: Request):
 
         return JSONResponse(content=jsonable_encoder({"filename":app.snapshot_filename}))
 
-def notifyScanProcessCompleted(filename, status):
+def notifyScanProcessProgress(filename, step, percent):
+    """
+    Notify the progress of a scan process.
+
+    This function is called by the scan processing task each time it moves
+    forward. The WebSocket sends the new state to the clients on the
+    'scan_progress_<key>' channel.
+
+    Args:
+        filename (str): The filename of the scan being processed.
+        step (str): Key of the current processing step.
+        percent (int): Global progress of the processing, 0 to 99.
+    """
+    app.scanProgress.update(scan_key(filename), step, percent)
+
+def notifyScanProcessCompleted(filename, status, error='', detail=''):
     """
     Notify that a scan process has completed.
-    
-    This function is called when a scan processing task finishes. It adds
+
+    This function is called when a scan processing task finishes. It sets
+    the final state on the 'scan_progress_<key>' channel and adds
     a notification to the queue, which can be picked up by the WebSocket
     to inform the client about the completion of the scan process.
-    
+
     Args:
         filename (str): The filename of the completed scan.
         status (str): The status of the completed scan process.
+        error (str): Error key when the status is 'failed'.
+        detail (str): Raw error message when the status is 'failed'.
     """
+    app.scanProgress.finish(scan_key(filename), status, error, detail)
+    # Message listened to by the app versions that do not know the progress channel
     print('add event to queue', filename, 'scan_process_'+md5(filename.encode()).hexdigest())
-    app.q.put('scan_process_'+md5(filename.encode()).hexdigest()+';#;'+status) 
+    app.q.put('scan_process_'+md5(filename.encode()).hexdigest()+';#;'+status)
 
 @app.post("/sunscan/scan/delete/", response_class=JSONResponse)
 async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
@@ -757,13 +781,44 @@ async def processScan(scan:Scan, background_tasks: BackgroundTasks):
     Args:
         scan (Scan): A model containing scan processing parameters.
         background_tasks (BackgroundTasks): FastAPI's background tasks handler.
-    
+
     Returns:
-        None: The processing is done in the background, so no immediate return.
+        JSONResponse: {"status": "started", "key": ...}, the processing itself is done in
+        the background and followed on the 'scan_progress_<key>' WebSocket channel.
+        404 with {"status": "failed", "error": "file_not_found", "key": ...} if the scan does not exist.
     """
+    key = scan_key(scan.filename)
     if (os.path.exists(scan.filename)):
         print(scan)
-        background_tasks.add_task(process_scan,callback=notifyScanProcessCompleted, scan=scan)
+        app.scanProgress.start(key)
+        background_tasks.add_task(process_scan, callback=notifyScanProcessCompleted, scan=scan,
+                                  progress=lambda step, percent: notifyScanProcessProgress(scan.filename, step, percent))
+        return JSONResponse(content={"status": "started", "key": key})
+
+    notifyScanProcessCompleted(scan.filename, 'failed', 'file_not_found', scan.filename)
+    return JSONResponse(content={"status": "failed", "error": "file_not_found", "key": key}, status_code=404)
+
+@app.post("/sunscan/scan/process/status/", response_class=JSONResponse)
+async def getScanProcessStatus(scan:ScanBase):
+    """
+    Get the current processing state of a scan.
+
+    Same information as the last message of the 'scan_progress_<key>' WebSocket
+    channel. Useful when the client missed messages, after the app was in the
+    background for instance.
+
+    Args:
+        scan (ScanBase): A model containing the filename of the scan.
+
+    Returns:
+        JSONResponse: key, status ('processing', 'completed', 'failed', or 'unknown' if no
+        processing of this scan is known), percent, step, error and detail.
+    """
+    key = scan_key(scan.filename)
+    state = app.scanProgress.get(key)
+    if state is None:
+        state = {"key": key, "status": "unknown", "percent": 0, "step": "", "error": "", "detail": ""}
+    return JSONResponse(content={name: state[name] for name in ("key", "status", "percent", "step", "error", "detail")})
 
 
 @app.post("/sunscan/process/stack/")
@@ -956,13 +1011,21 @@ async def websocket_endpoint(websocket: WebSocket):
     print("Socket is running...")
     try:
         focus_analyzer = FocusAnalyzer(measure_every=5)
+        # Last scan processing state sent to this client, 0 so that a client which
+        # (re)connects gets the current state of the scans being processed
+        progress_seq = 0
         # Infinite loop to handle continuous data streaming
         while True:
             # Check for notifications in the queue
-            if not app.q.empty(): 
+            if not app.q.empty():
                 print('q')
-                await websocket.send_text(app.q.get()) 
-                
+                await websocket.send_text(app.q.get())
+
+            # Send the scan processing states that changed since the last loop
+            for state in app.scanProgress.changes_since(progress_seq):
+                await websocket.send_text(ScanProgress.to_message(state))
+                progress_seq = state['seq']
+
             # Handle camera frame streaming if camera is connected
             if app.cameraController and app.cameraController.getStatus() == 'connected':
                 frame = app.cameraController.getLastFrame() 

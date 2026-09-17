@@ -6,6 +6,11 @@ Created on Thu Dec 31 11:42:32 2020
 
 
 ------------------------------------------------------------------------
+Modif SUNSCAN du 17 sept 2026 - acceleration sans changement des resultats
+- lecture du fichier ser par blocs de trames pour l'image moyenne et l'extraction de la raie
+- correction de tilt avec np.interp au lieu d'un interp1d par colonne
+- dernier fit ellipse uniquement pour la premiere image, resultat non utilise pour les autres
+
 Version 5.1 paris 1 er nov
 - ajout mode auto dans POl (magnetogramme)
 
@@ -216,23 +221,29 @@ except ImportError :
     from serfilesreader import Serfile
 
 
-def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param):
+def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param, progress=None):
     """
     ----------------------------------------------------------------------------
-    Reconstuit l'image du disque a partir de l'image moyenne des trames et 
+    Reconstuit l'image du disque a partir de l'image moyenne des trames et
     des trames extraite du fichier ser
     avec un fit polynomial
     Corrige de mauvaises lignes et transversallium
- 
+
     basefich: nom du fichier de base de la video sans extension, sans repertoire
-    shift: ecart en pixel par rapport au centre de la raie pour explorer 
+    shift: ecart en pixel par rapport au centre de la raie pour explorer
     longueur d'onde decalée
+    progress: optionnel, fonction progress(etape, fraction) appelee pour suivre
+    l'avancement, fraction de 0 a 1 dans l'etape 'reading_scan', 'building_disk'
+    ou 'correcting_geometry'
     ----------------------------------------------------------------------------
     """
     #plt.gray()              #palette de gris si utilise matplotlib pour visu debug
-    
+
     #t0=time.time()
-    
+
+    if progress is None:
+        progress=lambda etape, fraction: None
+
     clearlog()
     #print (Shift)
     shift = Shift[0]
@@ -365,7 +376,6 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
         else :
             logme('Error reading date-time SER file')
     
-    ok_flag=True              # Flag pour sortir de la boucle de lexture avec exit
     FrameIndex=1              # Index de trame    
 
     # fichier ser avec spectre raies verticales ou horizontales (flag true)
@@ -426,28 +436,14 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
         factor=1
 
     
-    #initialize le tableau qui recevra l'image somme de toutes les trames
-    mydata=np.zeros((hdr['NAXIS2'],hdr['NAXIS1']),dtype='uint64')
-    kept_frame=0
-    
-    while FrameIndex < FrameCount and ok_flag:
-        try :
-            num = scan.readFrameAtPos(FrameIndex)
-        except:
-            print(FrameIndex)
-        if flag_rotate:
-            num=np.rot90(num)
-        num=num*factor
-        #ajoute les trames pour creer une image haut snr pour extraire
-        #les parametres d'extraction de la colonne du centre de la raie et la
-        #corriger des distorsions
-        frame_mean=np.mean(num)
-        if frame_mean>0 : # seuil arbitraire etait a 3000
-            mydata=np.add(num,mydata)
-            kept_frame=kept_frame+1
-        
-        #increment la trame et l'offset pour lire trame suivant du fichier .ser
-        FrameIndex=FrameIndex+1
+    #ajoute les trames pour creer une image haut snr pour extraire
+    #les parametres d'extraction de la colonne du centre de la raie et la
+    #corriger des distorsions
+    #lecture du fichier ser par blocs de trames, les trames a zero ne sont pas gardees
+    mydata, kept_frame = SER_sum_frames(serfile, scan, FrameIndex, progress=lambda f: progress('reading_scan', f))
+    mydata=mydata*factor
+    if flag_rotate:
+        mydata=np.rot90(mydata)
     
     #print('frame kept :', kept_frame, 'over ', FrameIndex)
     # calcul de l'image moyenne
@@ -770,6 +766,13 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
     
     
     # Lance la reconstruction du disk a partir des trames
+    # sans affichage temps reel, lecture et extraction par blocs de trames (meme resultat)
+    # la boucle trame par trame ne sert plus que pour l'affichage
+    if not flag_display:
+        SER_extract_raie(serfile, scan, Disk, ind_l, ind_r, left_weights, right_weights, flag_rotate, factor, FrameIndex,
+                         progress=lambda f: progress('building_disk', f))
+        FrameIndex=FrameCount
+
     while FrameIndex < FrameCount :
         #t0=float(time.time())
         img=scan.readFrameAtPos(FrameIndex)
@@ -895,7 +898,10 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
     """
     
     for k in range(0,kend):
-        
+
+        # avancement : image k sur kend, puis apres chaque grande correction de l'image
+        progress('correcting_geometry', k/kend)
+
         logme(' ')
         logme(msg[k])
         """
@@ -1259,6 +1265,8 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
         
         
        
+        progress('correcting_geometry', (k+0.25)/kend)
+
         """
         -----------------------------------------------------------------------
         Calcul du tilt si on voit les bords du soleil
@@ -1371,16 +1379,14 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
                 ih=ih+dymax*2
                 crop=int(abs(TanAlpha)*iw)
                 NewImg=np.empty((ih,iw))
+                y=np.arange(0,ih)
                 for i in range(0,iw):
                     x=img2[:,i]
-                    NewImg[:,i]=x
-                    y=np.arange(0,ih)
                     dy=(i-colref)*TanAlpha
                     ycalc = y + np.ones(ih)*dy # improvements TheSmiths
-                    f=interp1d(ycalc,x,kind='linear',fill_value=(background,background),bounds_error=False)
-                    xcalc=f(y)
-                    NewLine=xcalc
-                    NewImg[:,i]=NewLine
+                    # np.interp est le calcul fait par interp1d(kind='linear') sur une colonne,
+                    # sans recreer un objet interp1d par colonne, fond en dehors des bornes
+                    NewImg[:,i]=np.interp(y,ycalc,x,left=background,right=background)
                 NewImg[NewImg<=0]=0  #modif du 19/05/2021 etait a 1000
                 img2=np.copy(NewImg)
                 if dymax != 0 :
@@ -1400,7 +1406,9 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
             img2=np.array(img2, dtype='uint16')
             DiskHDU=fits.PrimaryHDU(img2,header=hdr)
             DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[k]+'_tilt.fits'), overwrite='True')
-        
+
+        progress('correcting_geometry', (k+0.6)/kend)
+
         """
         ----------------------------------------------------------------
         Calcul du parametre de scaling SY/SX
@@ -1462,6 +1470,8 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
             DiskHDU.writeto(basefich+"_"+str(k)+'_scaled.fits', overwrite='True')
         """
        
+        progress('correcting_geometry', (k+0.8)/kend)
+
         """
         ----------------------------------------------------------------------
         Sanity check, second iteration et calcul des parametres du disk occulteur
@@ -1471,8 +1481,9 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
             cercle=[0,0,0,0]
             r=0
             
-        else:
+        elif k==0:
             # fit ellipse pour denier check
+            # uniquement pour la premiere image, pour les suivantes (k>0) le resultat n'etait pas utilise
             # zone d'exclusion des points contours zexcl en pourcentage de la hauteur image 
     
             X = detect_edge (frame, zexcl=0.1, crop=crop, disp_log=False)

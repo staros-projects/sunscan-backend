@@ -11,16 +11,57 @@ from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
 from mapping import create_solar_planisphere
 
-def process_scan(callback, scan):
+# Steps reported to the frontend while a scan is processed: (key, weight).
+# The weight is the rough share of the total processing time, it sets how much
+# of the 0-100 % range the step covers. The keys are translated by the frontend.
+PROGRESS_STEPS_RECON = [('reading_scan', 30), ('building_disk', 15), ('correcting_geometry', 30)]
+PROGRESS_STEPS_IMAGES = [('image_surface', 12), ('image_continuum', 3), ('image_prominences', 3)]
+PROGRESS_STEP_DOPPLER = ('image_doppler', 12)
+PROGRESS_STEPS_HELIUM = [('image_helium', 25)]
+
+
+class ProgressReporter:
+    """
+    Turn "fraction done of a step" into a global percentage and hand it to a notify function.
+
+    Args:
+        notify (function): notify(step, percent), or None to report nothing.
+        steps (list): Ordered (key, weight) list of the steps the processing goes through.
+    """
+    def __init__(self, notify, steps):
+        self.notify = notify
+        self.ranges = {}
+        self.last = None
+        total = sum(weight for key, weight in steps)
+        start = 0
+        for key, weight in steps:
+            self.ranges[key] = (100 * start / total, 100 * (start + weight) / total)
+            start += weight
+
+    def __call__(self, step, fraction=0.0):
+        if self.notify is None or step not in self.ranges:
+            return
+        start, end = self.ranges[step]
+        # 100 % is only reached with the 'completed' status
+        percent = min(int(start + (end - start) * min(max(fraction, 0.0), 1.0)), 99)
+        if (step, percent) != self.last:
+            self.last = (step, percent)
+            try:
+                self.notify(step, percent)
+            except Exception as e:
+                # Reporting the progress must never break the processing
+                print("error progress", e)
+
+
+def process_scan(callback, scan, progress=None):
     """
     Process a solar scan from a .ser file and generate various images.
 
     Args:
-        serfile (str): Path to the .ser file.
-        callback (function): Callback function to report processing status.
-        dopcont (bool): Flag to enable Doppler processing.
-        autocrop (bool): Flag to enable auto-cropping.
-        autocrop_size (int): Size for auto-cropping.
+        callback (function): Called at the end with (serfile, 'completed') or
+            (serfile, 'failed', error key, error message).
+        scan (Scan): Scan to process and processing options.
+        progress (function): Optional, called with (step key, global percent) while processing.
 
     Returns:
         None
@@ -43,8 +84,8 @@ def process_scan(callback, scan):
     process_doppler=scan.process_doppler
       
     if not os.path.exists(serfile):
-        return callback(serfile, 'failed')
-    
+        return callback(serfile, 'failed', 'file_not_found', serfile)
+
     print(f"process_scan {serfile}")
 
     # Create the three subdirectories
@@ -103,26 +144,44 @@ def process_scan(callback, scan):
         color = tag_value
         print('auto extracted line tag :'+color)
 
+    # Steps this processing goes through, to report its progress
+    steps = list(PROGRESS_STEPS_RECON)
+    if helium:
+        steps += PROGRESS_STEPS_HELIUM
+    else:
+        steps += PROGRESS_STEPS_IMAGES
+        if dopcont and process_doppler:
+            steps.append(PROGRESS_STEP_DOPPLER)
+    report = ProgressReporter(progress, steps)
+
+    # Error key sent to the frontend if the processing fails, depends on how far it went
+    error = 'reconstruction_failed'
     try:
         # Process the SER file using solex_proc function
-        frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param)
-        
+        frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param, progress=report)
+        error = 'image_generation_failed'
+
         header = update_header(WorkDir, header, observer)
 
         if helium:
+            report('image_helium')
             result_image = process_helium(WorkDir, frames, cercle, header, observer, apply_watermark_if_enable, Colorise_Image)
 
- 
+
         else:
             # Create and save surface image
+            report('image_surface')
             raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color, cercle)
             # Create and save continuum image
+            report('image_continuum')
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
+            report('image_prominences')
             create_protus_image(WorkDir, cv2.flip(raw,0), cercle,proSharpLevel, header, observer, 'sunscan_protus')
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
             if dopcont and process_doppler:
+                report('image_doppler')
                 create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
@@ -130,7 +189,7 @@ def process_scan(callback, scan):
         # If an error occurs during processing, print an error message
         print("error solex proc", e)
         # Call the callback function to indicate failure
-        callback(serfile, 'failed')
+        callback(serfile, 'failed', error, str(e))
 
 def update_header(path, header, observer):
     if os.path.exists(os.path.join(path, 'sunscan_conf.txt')):
@@ -720,7 +779,7 @@ def get_fits_header(exp, gain):
     hdr['WAVEUNIT']= -10  
     return hdr
 
-def mock_callback(serfile, status):
-    print(f"mock_callback {serfile} {status}")
+def mock_callback(serfile, status, error='', detail=''):
+    print(f"mock_callback {serfile} {status} {error} {detail}")
 if __name__ == '__main__':
     process_scan("C:\\Users\\g-ber\\Downloads\\2025_09_21-07_50_05-scan.ser", mock_callback, True, True, 1100, False, advanced='halpha',observer=' ')
