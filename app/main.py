@@ -55,6 +55,7 @@ from process import process_scan, get_fits_header
 from scan_progress import ScanProgress, scan_key
 import gallery
 from system_tuning import apply_system_tuning
+import network
 from animate import *
 from dedistor import *
  
@@ -86,6 +87,14 @@ class Scan(ScanBase):
     doppler_color: int 
     process_doppler: bool
 
+class WifiConnect(BaseModel):
+    ssid: str
+    password: str = ''
+    hidden: bool = False
+
+class WifiForget(BaseModel):
+    ssid: str
+
 class CameraControls(BaseModel):
     exp: float
     gain: float
@@ -109,6 +118,7 @@ def sys_debug():
 sys_debug()
 # Before any thread is started, so they all inherit the raised priority
 apply_system_tuning()
+network.start_network_monitor(BACKEND_API_VERSION)
 app = FastAPI()
 
 # CORS configuration to allow all origins
@@ -798,6 +808,49 @@ async def shutdownSUNSCAN():
 async def rebootSUNSCAN():
     os.system("sudo shutdown -r now")
     return JSONResponse(content={"message": "Reboot ok"}, status_code=200)
+
+
+# -- WiFi provisioning, see docs/provisioning-wifi.md --
+
+def _provisioning_error(e):
+    return JSONResponse(content={"status": "failed", "error": e.code, "detail": str(e)}, status_code=e.http_status)
+
+@app.get("/network/status", response_class=JSONResponse)
+def networkStatus():
+    """Current network mode (hotspot / client), address, saved networks and last connection attempt."""
+    return JSONResponse(content=network.status())
+
+@app.get("/network/wifi/scan", response_class=JSONResponse)
+def networkWifiScan(refresh: bool = True):
+    """WiFi networks seen by the SunScan, strongest first. refresh=false returns the last results."""
+    return JSONResponse(content=network.scan(refresh))
+
+@app.post("/network/wifi/connect", response_class=JSONResponse)
+def networkWifiConnect(req: WifiConnect):
+    """
+    Join a WiFi network. Answers right away (202), the switch starts a few seconds later
+    and stops the hotspot. On failure the hotspot comes back, the result is in /network/status.
+    """
+    try:
+        return JSONResponse(content=network.connect(req.ssid, req.password, req.hidden), status_code=202)
+    except network.ProvisioningError as e:
+        return _provisioning_error(e)
+
+@app.post("/network/wifi/forget", response_class=JSONResponse)
+def networkWifiForget(req: WifiForget):
+    """Delete a saved network. When it is the current one, the SunScan goes back to its hotspot."""
+    try:
+        return JSONResponse(content=network.forget(req.ssid))
+    except network.ProvisioningError as e:
+        return _provisioning_error(e)
+
+@app.post("/network/hotspot", response_class=JSONResponse)
+def networkHotspot():
+    """Switch to the hotspot now, the saved networks are kept (used again at the next boot)."""
+    try:
+        return JSONResponse(content=network.start_hotspot())
+    except network.ProvisioningError as e:
+        return _provisioning_error(e)
 
 
 @app.post("/sunscan/scan", response_class=JSONResponse)

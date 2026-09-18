@@ -25,3 +25,4 @@ python3-pyqt5
 python3-kms++
 unzip
 uvicorn
+avahi-utils

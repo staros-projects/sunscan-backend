@@ -108,3 +108,20 @@ EOF
 
 systemctl daemon-reload
 systemctl enable configure_hotspot.service
+
+# Let the backend (group netdev) manage the WiFi profiles for the provisioning from the app.
+# The backend also installs this rule at startup (app/network.py), for the devices updated with the zip
+cat << EOF2 > /etc/polkit-1/rules.d/40-sunscan-network.rules
+// SunScan backend : WiFi provisioning from the mobile app (see docs/provisioning-wifi.md)
+polkit.addRule(function(action, subject) {
+    if (subject.isInGroup("netdev") && (
+            action.id == "org.freedesktop.NetworkManager.settings.modify.system" ||
+            action.id == "org.freedesktop.NetworkManager.network-control" ||
+            action.id == "org.freedesktop.NetworkManager.wifi.scan" ||
+            action.id == "org.freedesktop.NetworkManager.wifi.share.protected" ||
+            action.id == "org.freedesktop.NetworkManager.wifi.share.open")) {
+        return polkit.Result.YES;
+    }
+});
+EOF2
+chmod 644 /etc/polkit-1/rules.d/40-sunscan-network.rules
