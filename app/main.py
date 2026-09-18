@@ -309,6 +309,7 @@ async def connect(request: Request):
     """
     camera = factory_imx477_camera_csi()
     app.cameraController = CameraController(camera)
+    app.cameraController.setProfile(app.profile)
     if app.cameraController.getStatus() != "connected":
         app.cameraController.start()
     return JSONResponse(content=jsonable_encoder({"camera_status":app.cameraController.getStatus()}))
@@ -489,11 +490,14 @@ class ProfileRequest(BaseModel):
 async def setProfile(request: ProfileRequest):
     """
     Enable/disable the 1D profile (12 bits, averaged over `columns` columns centred on `x`)
-    sent on the WebSocket with each preview frame (mono mode, not during a recording).
+    sent on the WebSocket with each preview frame (not during a recording). In colour mode it is
+    computed by the camera from the raw Bayer data, like the mono profile in monobin mode 0.
     """
     if request.columns < 1 or (request.x is not None and request.x < 0):
         raise HTTPException(status_code=422, detail="columns must be >= 1 and x >= 0")
     app.profile = request.model_dump()
+    if app.cameraController:
+        app.cameraController.setProfile(app.profile)
     return app.profile
 
 @app.get("/camera/infos/", response_class=JSONResponse)
@@ -1116,6 +1120,11 @@ async def websocket_endpoint(websocket: WebSocket):
                             x0 = min(max((app.profile['x'] if app.profile['x'] is not None else frame.shape[1] // 2) - n // 2, 0), frame.shape[1] - n)
                             p = (frame[:, x0:x0+n].sum(axis=1, dtype=np.uint32) + n * 8) // (n * 16)
                             await websocket.send_text(f'profile;#;{x0};#;{n};#;' + ','.join(map(str, p.tolist())))
+                        elif app.profile['enabled']:
+                            color_profile = app.cameraController.getColorProfile()
+                            if color_profile is not None:
+                                x0, n, p = color_profile
+                                await websocket.send_text(f'profile;#;{x0};#;{n};#;' + ','.join(map(str, p.tolist())))
 
                         # Send focus analyzer data
                         edges = None

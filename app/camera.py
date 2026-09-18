@@ -53,6 +53,8 @@ class BaseIMX477Camera_CSI(ABC):
         self._crop_height = 260
         self._max_adu = (0,0,0)
         self._monobin_mode = 0
+        self._profile_request = None  # (x, columns) of the 1D profile to compute in colour mode, None = off
+        self._profile = None          # last colour profile (x0, n, 12-bit values)
 
         # pisp is used on Raspberry Pi 5 and later
         self.tuning_file_name = "imx477_scientific_pisp.json" if Picamera2.platform == Platform.PISP else "imx477_scientific.json"
@@ -159,6 +161,42 @@ class BaseIMX477Camera_CSI(ABC):
         # signed arithmetic: a pixel below the black level must clamp to 0, not wrap around to white
         return np.clip(array.astype(np.int32), 0, None) * 4 # 16 bits conversion
 
+    def setProfileRequest(self, x, columns):
+        """
+        Enable (columns >= 1) or disable (columns None) the 1D profile computed in colour mode.
+
+        Args:
+            x (int | None): Centre column in mono frame coordinates, None = centre of the frame.
+            columns (int | None): Number of mono columns to average, None to disable.
+        """
+        self._profile_request = None if columns is None else (x, columns)
+        self._profile = None
+
+    def getProfile(self):
+        """
+        Get the last 1D profile computed in colour mode.
+
+        Returns:
+            tuple | None: (x0, n, values) with 12-bit values, one per mono frame row.
+        """
+        return self._profile
+
+    def _color_profile(self, image: AbstractImageRaw12BitColor, x, columns):
+        """
+        1D profile from the raw Bayer data, before demosaicing and resizing, computed exactly
+        like the mono profile in monobin mode 0 but on the requested band of columns only.
+        x and columns are in mono frame coordinates (1 mono column = 2 Bayer columns).
+        """
+        width = image.array.shape[1] // 2
+        n = min(columns, width)
+        x0 = min(max((x if x is not None else width // 2) - n // 2, 0), width - n)
+        band = image.crop(2 * x0, 0, 2 * n, image.array.shape[0])  # even width, aligned on the Bayer matrix
+        mono = self.process_monobin_mode(band, monobin_mode=0)
+        mono[mono > 65535] = 65535
+        # same 16 -> 12 bits scaling and rounding as the mono profile in main.py
+        values = (mono.sum(axis=1) + n * 8) // (n * 16)
+        return x0, n, values
+
     def capture(self, isRecording):
         """
         Capture an image from the camera.
@@ -193,6 +231,9 @@ class BaseIMX477Camera_CSI(ABC):
 
         else:
             # color image output
+            request = self._profile_request
+            if request is not None and not isRecording:
+                self._profile = self._color_profile(image, *request)
             f = image.to_rgb_16bit()
             height = f.shape[0]//4
             width = f.shape[1]//4

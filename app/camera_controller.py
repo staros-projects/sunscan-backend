@@ -185,6 +185,25 @@ class CameraController:
         self._camera_status = 'disconnected'
         self._camera.stop()
 
+    def setProfile(self, profile):
+        """
+        Configure the 1D profile computed by the camera in colour mode.
+
+        :param profile: dict with 'enabled', 'columns' and 'x' (see POST /camera/profile/)
+        """
+        if profile['enabled']:
+            self._camera.setProfileRequest(profile['x'], profile['columns'])
+        else:
+            self._camera.setProfileRequest(None, None)
+
+    def getColorProfile(self):
+        """
+        Get the last 1D profile computed from the raw Bayer data in colour mode.
+
+        :return: (x0, n, values) or None
+        """
+        return self._camera.getProfile()
+
     def getLastFrame(self):
         """
         Get the most recent captured frame.
