@@ -42,6 +42,7 @@ from locate_lines import locateLines
 
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from storage import *
 from camera import *
@@ -52,12 +53,14 @@ from focus_analyzer import FocusAnalyzer
 
 from process import process_scan, get_fits_header
 from scan_progress import ScanProgress, scan_key
+import gallery
+from system_tuning import apply_system_tuning
 from animate import *
 from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '1.4.4'
+BACKEND_API_VERSION = '2.0.0'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -104,6 +107,8 @@ def sys_debug():
     logging.debug(f'Python version   : {sys.version}')
 
 sys_debug()
+# Before any thread is started, so they all inherit the raised priority
+apply_system_tuning()
 app = FastAPI()
 
 # CORS configuration to allow all origins
@@ -471,6 +476,26 @@ async def toggleFocusAssistant(request: Request):
         app.cameraController.toggleFocusAssistant()
         return getCameraControls()
 
+# 1D spectral profile streamed on the WebSocket on demand (message 'profile;#;x0;#;n;#;v1,v2,...')
+# 12-bit values, one per frame row, averaged over n columns starting at x0
+app.profile = {'enabled': False, 'columns': 16, 'x': None}
+
+class ProfileRequest(BaseModel):
+    enabled: bool
+    columns: int = 16
+    x: int | None = None  # centre column, None = centre of the frame
+
+@app.post("/camera/profile/", response_class=JSONResponse)
+async def setProfile(request: ProfileRequest):
+    """
+    Enable/disable the 1D profile (12 bits, averaged over `columns` columns centred on `x`)
+    sent on the WebSocket with each preview frame (mono mode, not during a recording).
+    """
+    if request.columns < 1 or (request.x is not None and request.x < 0):
+        raise HTTPException(status_code=422, detail="columns must be >= 1 and x >= 0")
+    app.profile = request.model_dump()
+    return app.profile
+
 @app.get("/camera/infos/", response_class=JSONResponse)
 async def infos(request: Request):
     """
@@ -604,7 +629,11 @@ async def decreaseGain(request: Request):
         JSONResponse: Updated camera settings after stopping the recording.
     """
     if app.cameraController:
-        scan_path = app.cameraController.stopRecord()
+        # stopRecord blocks until the SER file is fully written: keep the event loop (WebSocket) alive meanwhile
+        scan_path = await run_in_threadpool(app.cameraController.stopRecord)
+        if not scan_path:
+            # stop received before any frame was recorded (or without a start)
+            return JSONResponse(content={"error": "no frame recorded"}, status_code=409)
         return JSONResponse(content={"scan": os.path.dirname(scan_path)}, status_code=200)
 
 @app.get("/camera/reset-controls/", response_class=JSONResponse)
@@ -704,8 +733,9 @@ async def deleteScan(scan:ScanBase, background_tasks: BackgroundTasks):
     Returns:
         None: This endpoint doesn't return a response directly.
     """
-    if os.path.exists(scan.filename):
-        shutil.rmtree(scan.filename)
+    path = gallery.resolve_storage_path(scan.filename)
+    if os.path.exists(path):
+        await gallery.run_low(shutil.rmtree, path)
         print(f"The directory {scan.filename} has been deleted.")
     else:
         print(f"The directory {scan.filename} does not exist.")
@@ -725,9 +755,11 @@ async def deleteScans(data: PostProcessRequest):
     Returns:
         None: This endpoint doesn't return a response directly.
     """
-    for p in data.paths:
-        if os.path.exists(p):
-            shutil.rmtree(p)
+    # check them all before deleting anything
+    paths = [gallery.resolve_storage_path(p) for p in data.paths]
+    for p, path in zip(data.paths, paths):
+        if os.path.exists(path):
+            await gallery.run_low(shutil.rmtree, path)
             print(f"The directory {p} has been deleted.")
         else:
             print(f"The directory {p} does not exist.")
@@ -950,9 +982,10 @@ class FileTagRequest(BaseModel):
 
 @app.post("/sunscan/scan/tag/")
 async def create_tag_file(request: FileTagRequest):
-    directory = request.filename
+    directory = gallery.resolve_storage_path(request.filename)
     tag = request.tag
-
+    if not tag or '/' in tag or '\\' in tag or tag in ('.', '..'):
+        raise HTTPException(status_code=400, detail="Invalid tag")
 
     # Check if the directory exists
     if not os.path.exists(directory):
@@ -1031,6 +1064,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 frame = app.cameraController.getLastFrame() 
     
                 if len(frame):
+                    # Live disk preview : core of the darkest line along the whole slit
+                    # (the disk can extend beyond the central 1000 columns)
+                    if (app.cameraController.isRecording() and len(frame.shape) == 2
+                            and app.cameraController.cameraIsCropped()):
+                        w = frame.shape[1] // 125 * 125
+                        band = cv2.blur(frame[:, :w].astype(np.float32), (1, 3))
+                        core = band.min(axis=0)                      # darkest pixel of each column
+                        core = core.reshape(125, -1).mean(axis=1)
+                        await websocket.send_text('scanline;#;' + ','.join(str(int(v)) for v in core))
+
                     r = frame / 256
                     edges = None
                     if not app.cameraController.isRecording():
@@ -1065,7 +1108,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Send intensity and spectrum data for cropped imagess
                         if len(frame.shape) == 2 and app.cameraController.cameraIsCropped() :
                             await websocket.send_text('intensity;#;'+','.join([str(int(p)) for p in frame[0,500:1500]]))  
-                            await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]])) 
+                            await websocket.send_text('spectrum;#;'+str(calculate_fwhm(frame[:,1014]))+';#;'+','.join([str(int(p)) for p in frame[:,1014]]))
+
+                        # 1D profile on demand: 16-bit frame -> 12 bits, averaged over n columns (rounded integer division)
+                        if app.profile['enabled'] and len(frame.shape) == 2:
+                            n = min(app.profile['columns'], frame.shape[1])
+                            x0 = min(max((app.profile['x'] if app.profile['x'] is not None else frame.shape[1] // 2) - n // 2, 0), frame.shape[1] - n)
+                            p = (frame[:, x0:x0+n].sum(axis=1, dtype=np.uint32) + n * 8) // (n * 16)
+                            await websocket.send_text(f'profile;#;{x0};#;{n};#;' + ','.join(map(str, p.tolist())))
 
                         # Send focus analyzer data
                         edges = None
@@ -1113,571 +1163,216 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 ## ------------ Webapp Routes here-------- #
-# Todo : draft for now - clear, clean and factorize stuff
-# Chemin vers le dossier contenant les scans
-# Se base sur la structure des dossiers de stockage
+# Legacy gallery routes, kept with the same URLs and responses for the clients built on them.
+# The web app now uses the /gallery API (gallery.py). Every path goes through gallery.resolve,
+# the zips are streamed (never written on the SD card) and the disk work runs at low priority.
 SCANS_DIR = "storage/scans"
 SNAPSHOTS_DIR = "storage/snapshots"
 STACKING_DIR = "storage/stacking"
 ANIMATIONS_DIR = "storage/animations"
 
 
+def _existing(section, *parts):
+    return gallery.resolve_existing(section, os.path.join(*parts))
+
+
+def _zip_name(prefix):
+    return f'{prefix}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+
+
+async def _delete(fulls):
+    await gallery.run_low(gallery.delete_paths, fulls)
+
+
+def _list_files(section, *parts):
+    folder = _existing(section, *parts)
+    return [f for f in os.listdir(folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.fits', '.ser', '.txt'))]
+
+
+def _list_dirs(section, *parts):
+    folder = _existing(section, *parts)
+    return [f for f in os.listdir(folder) if os.path.isdir(os.path.join(folder, f))]
+
+
 # ---------- SNAPSHOTS ----------- #
 @app.get("/snapshots")
-async def get_snapshots():
+def get_snapshots():
     """
-    Retrieve a list of all snapshot images.
-
-    This endpoint returns a list of all snapshot images stored in the snapshots directory.
-    Each image is represented by its name and a thumbnail URL.
-
-    Returns:
-        List[Dict[str, str]]: A list of dictionaries containing image names and thumbnail URLs.
-
-    Raises:
-        HTTPException: If the snapshots directory is not found.
+    List the snapshot images: [{name, thumbnail}].
     """
     if not os.path.exists(SNAPSHOTS_DIR):
         raise HTTPException(status_code=404, detail="Scan folder not found")
-    images = [f for f in os.listdir(SNAPSHOTS_DIR) if f.lower().endswith(('.fits', '.png'))] #todo : extract to a main list?
+    images = [f for f in os.listdir(SNAPSHOTS_DIR) if f.lower().endswith(('.fits', '.png'))]
     return [{"name": image, "thumbnail": f"/snapshots/{image}"} for image in images]
 
 @app.get("/download/snapshot/{image_name}")
-async def download_image(image_name: str):
-    """
-    Download a specific snapshot image.
-
-    This endpoint allows downloading a specific snapshot image stored in the snapshots directory.
-
-    Args:
-        image_name (str): The name of the image to be downloaded.
-
-    Returns:
-        FileResponse: The requested image file.
-
-    Raises:
-        HTTPException: If the image is not found.
-    """
-    image_path = os.path.join(SNAPSHOTS_DIR, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path, filename=image_name)
-
+def download_snapshot(image_name: str):
+    return FileResponse(_existing('snapshots', image_name), filename=image_name)
 
 
 # ----------- STACKING -------------#
 
 @app.get("/stacking")
-async def get_stacking_folders():
-    """
-    Retrieve a list of all stacking folders.
-
-    This endpoint returns a list of all folders stored in the stacking directory.
-    Each folder is represented by its name and a thumbnail URL.
-
-    Returns:
-        List[Dict[str, str]]: A list of dictionaries containing folder names and thumbnail URLs.
-    """
-    # Get folder list in stacking folder
-    folders = [f for f in os.listdir(STACKING_DIR) if os.path.isdir(os.path.join(STACKING_DIR, f))]
-    return [{"name": folder, "thumbnail": get_first_image_thumbnail(folder)} for folder in folders]
+def get_stacking_folders():
+    return [{"name": folder, "thumbnail": None} for folder in _list_dirs('stacking', '')]
 
 @app.get("/stacking/{stacking_folder}")
-async def get_images_in_stacking(stacking_folder: str):
-    """
-    Retrieve a list of images in a specific stacking folder.
-
-    This endpoint returns a list of images stored in the specified stacking folder.
-    Each image is represented by its name and a thumbnail URL.
-
-    Args:
-        stacking_folder (str): The name of the stacking folder.
-
-    Returns:
-        List[Dict[str, str]]: A list of dictionaries containing image names and thumbnail URLs.
-
-    Raises:
-        HTTPException: If the stacking folder is not found.
-    """
-    stacking_path = os.path.join(STACKING_DIR, stacking_folder)
-    if not os.path.exists(stacking_path):
-        raise HTTPException(status_code=404, detail="Stacking folder not found")
-    images = [f for f in os.listdir(stacking_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.fits', '.ser', '.txt'))]
-
-    return [{"name": image, "thumbnail": f"/stacking/{stacking_folder}/{image}"} for image in images]
+def get_images_in_stacking(stacking_folder: str):
+    return [{"name": image, "thumbnail": f"/stacking/{stacking_folder}/{image}"} for image in _list_files('stacking', stacking_folder)]
 
 @app.get("/stacking/{stacking_folder}/{image_name}")
-async def get_image_in_stacking(stacking_folder: str, image_name: str):
-    image_path = os.path.join(STACKING_DIR, stacking_folder, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path)
-
+def get_image_in_stacking(stacking_folder: str, image_name: str):
+    return FileResponse(_existing('stacking', stacking_folder, image_name))
 
 @app.get("/download/stacking/{stacking_folder}/{image_name}")
-async def download_image_in_stacking(stacking_folder: str, image_name: str):
-    image_path = os.path.join(STACKING_DIR, stacking_folder, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path, filename=image_name)
-
+def download_image_in_stacking(stacking_folder: str, image_name: str):
+    return FileResponse(_existing('stacking', stacking_folder, image_name), filename=image_name)
 
 @app.get("/download/stacking/multiple/{stacking_folder}/")
 async def download_multiple_images_in_stacking(stacking_folder: str, files: List[str] = Query(...)):
+    folder = _existing('stacking', stacking_folder)
+    fulls = [_existing('stacking', stacking_folder, f) for f in files]
+    return await gallery.download_response(fulls, _zip_name('stacking'), base=folder)
 
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-    # Ensure we work within SCANS_DIR
-    absolute_files = [os.path.join(STACKING_DIR, stacking_folder, file) for file in files]
-
-    for file in absolute_files:
-        if not os.path.exists(file):
-            raise HTTPException(status_code=404, detail="Image not found")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([file, STACKING_DIR]) == STACKING_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-
-    zip_file_name = f'stacking_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    zip_path = os.path.join(STACKING_DIR, zip_file_name)
-
-    zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for file in absolute_files:
-        zipf.write(file, os.path.basename(file))
-    zipf.close()
-
-    return FileResponse(zip_path, filename=zip_file_name)
-
-
-# download multiple folders selection in stacking
 @app.get("/download/stacking/folders")
 async def download_folders_in_stacking(folders: List[str] = Query(...)):
-
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    # Ensure we work within SCANS_DIR
-    absolute_folders = [os.path.join(STACKING_DIR, folder) for folder in folders]
-
-    #for each folders create a zip file and add his filename in a list
-    zip_files = []
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Stacking folder not found")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([folder, STACKING_DIR]) == STACKING_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-        zip_file_name = f'{os.path.basename(folder)}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-        zip_path = os.path.join(STACKING_DIR, zip_file_name)
-
-        zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                file_path = os.path.join(root, file)
-                zipf.write(file_path, os.path.relpath(file_path, folder))
-        zipf.close()
-        zip_files.append(zip_file_name)
-
-    # create a global zip file with each zip files in the list zip_files
-    global_zip_file_name = f'stacking_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    global_zip_path = os.path.join(STACKING_DIR, global_zip_file_name)
-
-    zipf = zipfile.ZipFile(global_zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for zip_file in zip_files:
-        zipf.write(os.path.join(STACKING_DIR, zip_file), zip_file)
-    zipf.close()
-
-    return FileResponse(global_zip_path, filename=global_zip_file_name)
-
+    # one zip with a folder per stacking (it used to be a zip of zips)
+    fulls = [_existing('stacking', f) for f in folders]
+    return await gallery.download_response(fulls, _zip_name('stacking'))
 
 @app.delete("/stacking/selection")
 async def delete_images_in_stacking(folders: List[str] = Query(...)):
-    # Ensure we work within STACKING_DIR
-    absolute_folders = [os.path.join(STACKING_DIR, folder) for folder in folders]
-
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Stacking folder not found")
-                # Verify the folder is within STACKING_DIR
-        if not os.path.commonpath([folder, STACKING_DIR]) == STACKING_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-        shutil.rmtree(folder)
-
+    fulls = [_existing('stacking', f) for f in folders]
+    await _delete(fulls)
     return {"message": "Folders deleted successfully"}
-
-
 
 
 # --------------- ANIMATIONS ------------- #
 @app.get("/animations")
-async def get_animations_folders():
-    # get folders list in animations folders
-    folders = [f for f in os.listdir(ANIMATIONS_DIR) if os.path.isdir(os.path.join(ANIMATIONS_DIR, f))]
-    return [{"name": folder, "thumbnail": get_first_image_thumbnail(folder)} for folder in folders]
+def get_animations_folders():
+    return [{"name": folder, "thumbnail": None} for folder in _list_dirs('animations', '')]
 
 @app.get("/animations/{animation_folder}")
-async def get_images_in_animations(animation_folder: str):
-    animation_path = os.path.join(ANIMATIONS_DIR, animation_folder)
-    if not os.path.exists(animation_path):
-        raise HTTPException(status_code=404, detail="Animation folder not found")
-    images = [f for f in os.listdir(animation_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.fits', '.ser', '.txt'))]
-
-    return [{"name": image, "thumbnail": f"/animations/{animation_folder}/{image}"} for image in images]
-
+def get_images_in_animations(animation_folder: str):
+    return [{"name": image, "thumbnail": f"/animations/{animation_folder}/{image}"} for image in _list_files('animations', animation_folder)]
 
 @app.get("/animations/{animation_folder}/{image_name}")
-async def get_image_in_animations(animation_folder: str, image_name: str):
-    image_path = os.path.join(ANIMATIONS_DIR, animation_folder, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path)
-
+def get_image_in_animations(animation_folder: str, image_name: str):
+    return FileResponse(_existing('animations', animation_folder, image_name))
 
 @app.get("/download/animations/{animation_folder}/{image_name}")
-async def download_image_in_animations(animation_folder: str, image_name: str):
-    image_path = os.path.join(ANIMATIONS_DIR, animation_folder, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path, filename=image_name)
-
-
+def download_image_in_animations(animation_folder: str, image_name: str):
+    return FileResponse(_existing('animations', animation_folder, image_name), filename=image_name)
 
 @app.get("/download/animations/multiple/{animation_folder}/")
 async def download_multiple_images_in_animations(animation_folder: str, files: List[str] = Query(...)):
-
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    # Ensure we work within SCANS_DIR
-    absolute_files = [os.path.join(ANIMATIONS_DIR, animation_folder, file) for file in files]
-
-    for file in absolute_files:
-        if not os.path.exists(file):
-            raise HTTPException(status_code=404, detail="Image not found")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([file, ANIMATIONS_DIR]) == ANIMATIONS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-
-    zip_file_name = f'animations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    zip_path = os.path.join(ANIMATIONS_DIR, zip_file_name)
-
-    zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for file in absolute_files:
-        zipf.write(file, os.path.basename(file))
-    zipf.close()
-
-    return FileResponse(zip_path, filename=zip_file_name)
-
-
+    folder = _existing('animations', animation_folder)
+    fulls = [_existing('animations', animation_folder, f) for f in files]
+    return await gallery.download_response(fulls, _zip_name('animations'), base=folder)
 
 @app.delete("/animations/selection")
 async def delete_images_in_animations(folders: List[str] = Query(...)):
-
-    absolute_folders = [os.path.join(ANIMATIONS_DIR, folder) for folder in folders]
-
-    for folder in absolute_folders:
-            if not os.path.exists(folder):
-                raise HTTPException(status_code=404, detail="Animation folder not found")
-                # Verify the folder is within ANIMATIONS_DIR
-            if not os.path.commonpath([folder, ANIMATIONS_DIR]) == ANIMATIONS_DIR:
-                raise HTTPException(status_code=400, detail="Invalid folder path")
-            shutil.rmtree(folder)
-
+    fulls = [_existing('animations', f) for f in folders]
+    await _delete(fulls)
     return {"message": "Folders deleted successfully"}
 
-# download multiple folders selection in animations
 @app.get("/download/animations/folders")
 async def download_folders_in_animations(folders: List[str] = Query(...)):
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    # Ensure we work within SCANS_DIR
-    absolute_folders = [os.path.join(ANIMATIONS_DIR, folder) for folder in folders]
-
-    #for each folders create a zip file and add his filename in a list
-    zip_files = []
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Animation folder not found")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([folder, ANIMATIONS_DIR]) == ANIMATIONS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-        zip_file_name = f'{os.path.basename(folder)}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-        zip_path = os.path.join(ANIMATIONS_DIR, zip_file_name)
-
-        zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                file_path = os.path.join(root, file)
-                zipf.write(file_path, os.path.relpath(file_path, folder))
-        zipf.close()
-        zip_files.append(zip_file_name)
-
-    # create a global zip file with each zip files in the list zip_files
-    global_zip_file_name = f'animations_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    global_zip_path = os.path.join(ANIMATIONS_DIR, global_zip_file_name)
-
-    zipf = zipfile.ZipFile(global_zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for zip_file in zip_files:
-        zipf.write(os.path.join(ANIMATIONS_DIR, zip_file), zip_file)
-    zipf.close()
-
-    return FileResponse(global_zip_path, filename=global_zip_file_name)
+    fulls = [_existing('animations', f) for f in folders]
+    return await gallery.download_response(fulls, _zip_name('animations'))
 
 
 # ------------ SCANS -------------#
 @app.get("/dates")
-async def get_date_folders():
-    dates = [f for f in os.listdir(SCANS_DIR) if os.path.isdir(os.path.join(SCANS_DIR, f))]
-    return [{"name": date, "thumbnail": get_first_image_thumbnail(date)} for date in dates]
+def get_date_folders():
+    return [{"name": date, "thumbnail": get_first_image_thumbnail(date)} for date in _list_dirs('scans', '')]
 
 @app.get("/dates/{date_folder}")
-async def get_scan_folders(date_folder: str):
-    date_path = os.path.join(SCANS_DIR, date_folder)
-    if not os.path.exists(date_path):
-        raise HTTPException(status_code=404, detail="Date folder not found")
-    scans = [f for f in os.listdir(date_path) if os.path.isdir(os.path.join(date_path, f))]
-    return [{"name": scan, "thumbnail": get_first_image_thumbnail(date_folder, scan)} for scan in scans]
+def get_scan_folders(date_folder: str):
+    return [{"name": scan, "thumbnail": get_first_image_thumbnail(date_folder, scan)} for scan in _list_dirs('scans', date_folder)]
 
 @app.get("/dates/{date_folder}/scans/{scan_folder}")
-async def get_images_in_scan(date_folder: str, scan_folder: str):
-    scan_path = os.path.join(SCANS_DIR, date_folder, scan_folder)
-    if not os.path.exists(scan_path):
-        raise HTTPException(status_code=404, detail="Scan folder not found")
-    images = [f for f in os.listdir(scan_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.fits', '.ser', '.txt'))] #todo : extract to a main list?
-    return [{"name": image, "thumbnail": f"/images/{date_folder}/{scan_folder}/{image}"} for image in images]
+def get_images_in_scan(date_folder: str, scan_folder: str):
+    return [{"name": image, "thumbnail": f"/images/{date_folder}/{scan_folder}/{image}"} for image in _list_files('scans', date_folder, scan_folder)]
 
 @app.get("/images/{date_folder}/{scan_folder}/{image_name}")
-async def get_image(date_folder: str, scan_folder: str, image_name: str):
-    image_path = os.path.join(SCANS_DIR, date_folder, scan_folder, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path)
-
-
+def get_image(date_folder: str, scan_folder: str, image_name: str):
+    return FileResponse(_existing('scans', date_folder, scan_folder, image_name))
 
 @app.get("/download/image/{date_folder}/{scan_folder}/{image_name}")
-async def download_image(date_folder: str, scan_folder: str, image_name: str):
-    image_path = os.path.join(SCANS_DIR, date_folder, scan_folder, image_name)
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path, filename=scan_folder.replace('sunscan_', '')+'-'+image_name)
+def download_image(date_folder: str, scan_folder: str, image_name: str):
+    return FileResponse(_existing('scans', date_folder, scan_folder, image_name),
+                        filename=scan_folder.replace('sunscan_', '')+'-'+image_name)
 
 def get_first_image_thumbnail(date_folder, scan_folder=None):
-    path = os.path.join(SCANS_DIR, date_folder)
-    if scan_folder:
-        path = os.path.join(path, scan_folder)
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.ser', '.txt')): # todo : extract to a main list?
-                return f"/images/{os.path.relpath(os.path.join(root, file), SCANS_DIR)}"
-    return None
-
+    """Preview image of a date or scan folder, as a legacy /images/... URL."""
+    preview = gallery._folder_preview(_existing('scans', date_folder, scan_folder or ''))
+    if not preview:
+        return None
+    return f"/images/{os.path.relpath(preview, gallery.SECTIONS['scans'])}"
 
 @app.get("/download/scans/multiple")
 async def download_multiple_scans(folders: List[str] = Query(...)):
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    absolute_folders = [os.path.join(SCANS_DIR, folder) for folder in folders]
-
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Folder not found")
-        if not os.listdir(folder):
-            raise HTTPException(status_code=404, detail="Folder is empty")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-
-    zip_file_name = f'scans_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    zip_path = os.path.join(SCANS_DIR, zip_file_name)
-
-    zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for folder in absolute_folders:
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arc_path = os.path.relpath(file_path, SCANS_DIR)
-                zipf.write(file_path, arc_path)
-    zipf.close()
-
-    return FileResponse(zip_path, filename=zip_file_name)
-
+    fulls = [_existing('scans', f) for f in folders]
+    return await gallery.download_response(fulls, _zip_name('scans'), base=gallery.SECTIONS['scans'])
 
 @app.get("/download/scan/{date_folder}")
-async def download_scan(date_folder: str):
-
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    # get folder path verify if exists and create a zip with all files and subfolders
-    scan_path = os.path.join(SCANS_DIR, date_folder)
-    if not os.path.exists(scan_path):
-        raise HTTPException(status_code=404, detail="Scan folder not found")
-    if not os.listdir(scan_path):
-        raise HTTPException(status_code=404, detail="Scan folder is empty")
-
-    zip_file_name = f"{SCANS_DIR}/{date_folder}.zip"
-    zipf = zipfile.ZipFile(zip_file_name, 'w', zipfile.ZIP_DEFLATED)
-    for root, dirs, files in os.walk(scan_path):
-        for file in files:
-            zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), scan_path))
-    zipf.close()
-
-    return FileResponse(zip_file_name, filename=f"{date_folder}.zip")
-
-
+async def download_date(date_folder: str):
+    folder = _existing('scans', date_folder)
+    return await gallery.download_response([folder], f"{date_folder}.zip", base=folder)
 
 @app.get("/download/date/{date_folder}/scan/{scan_folder}")
 async def download_scan(date_folder: str, scan_folder: str):
-
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    # get folder path verify if exists and create a zip with all files and subfolders
-    scan_path = os.path.join(SCANS_DIR, date_folder, scan_folder)
-    if not os.path.exists(scan_path):
-        raise HTTPException(status_code=404, detail="Scan folder not found")
-    if not os.listdir(scan_path):
-        raise HTTPException(status_code=404, detail="Scan folder is empty")
-
-    zip_file_name = f"{SCANS_DIR}/{scan_folder}.zip"
-    zipf = zipfile.ZipFile(zip_file_name, 'w', zipfile.ZIP_DEFLATED)
-    for root, dirs, files in os.walk(scan_path):
-        for file in files:
-            zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), scan_path))
-    zipf.close()
-
-    return FileResponse(zip_file_name, filename=f"{scan_folder}.zip")
+    folder = _existing('scans', date_folder, scan_folder)
+    return await gallery.download_response([folder], f"{scan_folder}.zip", base=folder)
 
 @app.get("/download/date/{date_folder}/scans/multiple")
-async def download_multiple_scans(date_folder: str, folders: List[str] = Query(...)):
-
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    absolute_folders = [os.path.join(SCANS_DIR, date_folder, folder) for folder in folders]
-
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Folder not found")
-        if not os.listdir(folder):
-            raise HTTPException(status_code=404, detail="Folder is empty")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-
-    zip_file_name = f'scans_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    zip_path = os.path.join(SCANS_DIR, zip_file_name)
-
-    zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for folder in absolute_folders:
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arc_path = os.path.relpath(file_path, SCANS_DIR)
-                zipf.write(file_path, arc_path)
-    zipf.close()
-
-    return FileResponse(zip_path, filename=zip_file_name)
+async def download_multiple_date_scans(date_folder: str, folders: List[str] = Query(...)):
+    fulls = [_existing('scans', date_folder, f) for f in folders]
+    return await gallery.download_response(fulls, _zip_name('scans'), base=gallery.SECTIONS['scans'])
 
 @app.get("/download/date/{date_folder}/scan/{scan_folder}/images/multiple")
 async def download_multiple_images(date_folder: str, scan_folder: str, images: List[str] = Query(...)):
-
-    # Clean up zip files
-    cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
-
-    absolute_images = [os.path.join(SCANS_DIR, date_folder, scan_folder, image) for image in images]
-
-    print(absolute_images)
-
-    for image in absolute_images:
-        if not os.path.exists(image):
-            raise HTTPException(status_code=404, detail="Image not found")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([image, SCANS_DIR]) == SCANS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid image path")
-
-    zip_file_name = f'images_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    zip_path = os.path.join(SCANS_DIR, zip_file_name)
-
-    zipf = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for image in absolute_images:
-        zipf.write(image, os.path.relpath(image, SCANS_DIR))
-    zipf.close()
-
-    return FileResponse(zip_path, filename=zip_file_name)
+    fulls = [_existing('scans', date_folder, scan_folder, i) for i in images]
+    return await gallery.download_response(fulls, _zip_name('images'), base=gallery.SECTIONS['scans'])
 
 @app.delete("/scans")
-async def delete_scans(folders: List[str] = Query(...)):
-    absolute_folders = [os.path.join(SCANS_DIR, folder) for folder in folders]
-
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Folder not found")
-        #if not os.listdir(folder):
-        #    raise HTTPException(status_code=404, detail="Folder is empty")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-
-        shutil.rmtree(folder)
-
+async def delete_date_folders(folders: List[str] = Query(...)):
+    fulls = [_existing('scans', f) for f in folders]
+    await _delete(fulls)
     return {"message": "Folders deleted successfully"}
-
 
 @app.delete("/dates/{date_folder}/scans")
 async def delete_scans(date_folder: str, folders: List[str] = Query(...)):
-    absolute_folders = [os.path.join(SCANS_DIR, date_folder, folder) for folder in folders]
-
-    for folder in absolute_folders:
-        if not os.path.exists(folder):
-            raise HTTPException(status_code=404, detail="Folder not found")
-        if not os.listdir(folder):
-            raise HTTPException(status_code=404, detail="Folder is empty")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([folder, SCANS_DIR]) == SCANS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid folder path")
-        shutil.rmtree(folder)
-
+    fulls = [_existing('scans', date_folder, f) for f in folders]
+    await _delete(fulls)
     return {"message": "Folders deleted successfully"}
 
 @app.delete("/dates/{date_folder}/scans/{scan_folder}/images")
 async def delete_images(date_folder: str, scan_folder: str, images: List[str] = Query(...)):
-    # Ensure we work within SCANS_DIR
-    absolute_images = [os.path.join(SCANS_DIR, date_folder, scan_folder, image) for image in images]
-
-    for image in absolute_images:
-        if not os.path.exists(image):
-            raise HTTPException(status_code=404, detail="Image not found")
-        # Verify the folder is within SCANS_DIR
-        if not os.path.commonpath([image, SCANS_DIR]) == SCANS_DIR:
-            raise HTTPException(status_code=400, detail="Invalid image path")
-        os.remove(image)
-
+    fulls = [_existing('scans', date_folder, scan_folder, i) for i in images]
+    await _delete(fulls)
     return {"message": "Images deleted successfully"}
 
-
 @app.get("/dates/{date_folder}/scans/{scan_folder}/log")
-async def get_scan_log(date_folder: str, scan_folder: str):
-    log_path = os.path.join(SCANS_DIR, date_folder, scan_folder, "_scan_log.txt")
-    if not os.path.exists(log_path):
-        raise HTTPException(status_code=404, detail="Log file not found")
-    return FileResponse(log_path, filename="_scan_log.txt")
-
-
+def get_scan_log(date_folder: str, scan_folder: str):
+    return FileResponse(_existing('scans', date_folder, scan_folder, "_scan_log.txt"), filename="_scan_log.txt")
 
 
 def cleanup_zip_files(*directories):
     """
-    Remove all zip files from the specified directories.
-
-    Args:
-        *directories: Variable number of directory paths to clean up.
+    Remove the zip files left in the storage directories by the former downloads,
+    which were built on the SD card before being sent.
     """
     for directory in directories:
+        if not os.path.isdir(directory):
+            continue
         for file in os.listdir(directory):
             if file.endswith(".zip"):
                 os.remove(os.path.join(directory, file))
 
+cleanup_zip_files(STACKING_DIR, SCANS_DIR, ANIMATIONS_DIR)
+# in the low priority pool: does not delay the startup
+gallery.run_in_background(gallery.remove_empty_folders)
 
+app.include_router(gallery.router)

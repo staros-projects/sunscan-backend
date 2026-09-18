@@ -11,6 +11,8 @@ try:
 except:
     from serfilesreader.serfilesreader import Serfile
 
+from ser_writer import SerWriter
+
 class CameraController:
     """
     A class to control camera operations, including recording and image processing.
@@ -48,6 +50,11 @@ class CameraController:
         self._fc = 0
         
         self._serfile_object = None
+        self._time_in_progress = 0
+        self._t0 = 0
+        self._final_ser_filename = None
+        self._writer = None          # SerWriter of the recording in progress (owned by the capture thread)
+        self._last_writer = None     # SerWriter of the last recording, may still be draining its queue
         self._normalize = 1
         self._max_visu_threshold = 256
 
@@ -69,19 +76,28 @@ class CameraController:
         while(self._running):
             self._frame = self._camera.capture(self._record)  # Capture a frame from the camera
             if self._record and not self.isInColorMode():  # Recording active and camera in mono mode
-                if not self._serfile_object:  # If SER file object doesn't exist
+                if not self._writer:  # first frame of this recording
                     self._initSerFile()  # Initialize a new SER file
+                    self._writer = SerWriter(self._serfile_object)  # dedicated writer thread + queue
                     self._t0 = time.time()  # Set the start time for recording
                 self._time_in_progress = time.time()  # Update the current time
-                self._serfile_object.addFrame(self._frame)  # Add the captured frame to the SER file
-                self._fc+=1  # Increment the frame count
-            elif self._serfile_object:
-                # recording just stopped: flush and close the SER file from the
-                # capture thread to avoid racing with an in-flight addFrame
-                self._serfile_object.closeWriteFile()
-                self._serfile_object = None
+                # never write to the SD card from this thread: just enqueue the frame
+                if self._writer.put(self._frame):
+                    self._fc+=1  # Increment the frame count
+            elif self._writer:
+                # recording just stopped: hand the writer over, it drains its queue
+                # and closes the file on its own thread (stopRecord waits for it)
+                self._hand_over_writer()
 
        
+    def _hand_over_writer(self):
+        writer = self._writer
+        if writer:
+            writer.finish()
+            self._last_writer = writer
+            self._writer = None
+            self._serfile_object = None
+
     def isRecording(self):
         """
         Check if the camera is currently recording.
@@ -159,8 +175,13 @@ class CameraController:
         Stop the camera controller thread and release resources.
         """
         self._running = False
+        self._record = False
         self._frame = None
         self._thread.join()
+        # camera stopped while recording: still flush and close the SER file properly
+        self._hand_over_writer()
+        if self._last_writer:
+            self._last_writer.wait(60)
         self._camera_status = 'disconnected'
         self._camera.stop()
 
@@ -276,7 +297,9 @@ class CameraController:
         Start recording frames.
         """
         self._serfile_object = None
-        self._fc = 1
+        self._final_ser_filename = None
+        self._last_writer = None
+        self._fc = 0
         self._time_in_progress =0
         self._t0 =0  
         self._record = True
@@ -289,9 +312,18 @@ class CameraController:
         closed the SER file, so callers can safely read it afterwards.
         """
         self._record = False
+        # 1. wait for the capture thread to hand the writer over (at most one frame period)
         deadline = time.time() + 10
-        while self._serfile_object is not None and time.time() < deadline:
-            time.sleep(0.05)
+        while self._writer is not None and time.time() < deadline:
+            time.sleep(0.02)
+        # 2. wait for the writer to drain its queue and close the file. The queue holds
+        #    up to 30 s of frames, so allow more than that if the SD card is stalling.
+        writer = self._last_writer
+        if writer:
+            if not writer.wait(90):
+                print("WARNING: SER writer still busy after 90 s, scan file may be incomplete")
+            print(f"ser writer : written={writer.written} dropped={writer.dropped} "
+                  f"max_queue={writer.max_depth} max_write={writer.max_write_s*1000:.0f}ms error={writer.error}")
         print(self._fc,self._time_in_progress,self._t0)
         if self._time_in_progress > self._t0:
             print(f"frame count : {self._fc} time:{self._time_in_progress-self._t0} fps:{self._fc/(self._time_in_progress-self._t0)}")

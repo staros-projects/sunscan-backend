@@ -79,12 +79,12 @@ class BaseIMX477Camera_CSI(ABC):
         contrast_algo["gamma_curve"] = [0, 0, 65535, 65535]
         self._picam2 = Picamera2(tuning=tuning)
         
-        mode = self._picam2.sensor_modes[3]
+        mode_index, mode = self._select_sensor_mode(self._picam2.sensor_modes)
         print("-----------------")
-        print(f"Sensor mode: {mode}")
+        print(f"Sensor mode [{mode_index}]: {mode}")
         print("-----------------")
   
-        self._sensor_mode = 3
+        self._sensor_mode = mode_index
         self._sensor_size = (mode['size'][0],mode['size'][1])
         video_config = self._picam2.create_video_configuration(
             buffer_count=10,
@@ -98,6 +98,27 @@ class BaseIMX477Camera_CSI(ABC):
 
         return self._sensor_size
     
+    @staticmethod
+    def _select_sensor_mode(sensor_modes, size=(4056, 3040), bit_depth=12):
+        """
+        Pick the full-resolution 12-bit sensor mode by its characteristics.
+
+        The index of this mode is not stable: older libcamera/kernel versions expose
+        4 modes (full-res 12-bit at index 3), newer ones expose more (10-bit and
+        4056x2160 variants), so the mode must never be selected by index.
+
+        Returns:
+            tuple: (index, mode dict)
+        """
+        for i, m in enumerate(sensor_modes):
+            if tuple(m['size']) == size and m.get('bit_depth') == bit_depth:
+                return i, m
+        # Fallback: largest area, then highest bit depth
+        i, m = max(enumerate(sensor_modes),
+                   key=lambda im: (im[1]['size'][0] * im[1]['size'][1], im[1].get('bit_depth', 0)))
+        print(f"WARNING: sensor mode {size} {bit_depth}-bit not found, falling back to {m}")
+        return i, m
+
     def getName(self):
         """
         Get the name of the camera.
@@ -128,14 +149,15 @@ class BaseIMX477Camera_CSI(ABC):
     def process_monobin_mode(self, image: AbstractImageRaw12BitColor, monobin_mode):
         match monobin_mode: 
             case 0:  # rgb monobin
-                array = (image.bin_2x2() - (self.black_level_camera * 4)) 
+                array = (image.bin_2x2().astype(np.int32) - (self.black_level_camera * 4)) 
             case 1:  # red layer
-                array = (image.channel_red() - self.black_level_camera)
+                array = (image.channel_red().astype(np.int32) - self.black_level_camera)
             case 2:  # green layer
-                array = (image.channel_green() - self.black_level_camera)
+                array = (image.channel_green().astype(np.int32) - self.black_level_camera)
             case 3:  # blue layer
-                array = (image.channel_blue() - self.black_level_camera)
-        return array * 4 # 16 bits conversion
+                array = (image.channel_blue().astype(np.int32) - self.black_level_camera)
+        # signed arithmetic: a pixel below the black level must clamp to 0, not wrap around to white
+        return np.clip(array.astype(np.int32), 0, None) * 4 # 16 bits conversion
 
     def capture(self, isRecording):
         """

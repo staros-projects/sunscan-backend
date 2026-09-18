@@ -79,6 +79,8 @@ else
 
   nmcli con add type wifi ifname "\$INTERFACE" con-name hotspot autoconnect yes ssid "\$SSID"
   nmcli con modify hotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk "\$PASSWORD"
+  # WPA2 / CCMP only, no PMF : the default WPA1+WPA2 mixed mode is refused by some phones (Xiaomi)
+  nmcli con modify hotspot wifi-sec.proto rsn wifi-sec.pairwise ccmp wifi-sec.group ccmp wifi-sec.pmf disable
   nmcli con modify hotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared
   nmcli con up hotspot
 fi
