@@ -350,7 +350,7 @@ def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag):
                 color = k
                 print('stack color image generation ', text, observer)
                 Colorise_Image(color, sum_image, work_dir, text, observer, False, 'stacked_color_'+str(scan_count)+'_raw')
-                Colorise_Image(color, sum_image, work_dir, text, observer, False, 'stacked_color_'+str(scan_count)+'_sharpen')
+                Colorise_Image(color, sum_image2, work_dir, text, observer, False, 'stacked_color_'+str(scan_count)+'_sharpen')
                 break
 
         if tag in label_enabled_for_negative:
@@ -363,7 +363,9 @@ def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag):
             cercle=[xc,yc,wi,he]  
             im_type = 'negative'
             text = text.replace('stacked images', 'stacked negative images')
-            n = create_negative_surface_image(work_dir, sum_image, cercle, text, observer, return_image=True)
+            # Built on the sharpened image, as the negative of a single scan (the file keeps its '_raw' name,
+            # the one the gallery, the animations and SpectroSolHub look for)
+            n = create_negative_surface_image(work_dir, sum_image2, cercle, text, observer, return_image=True)
             imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.png'), n, format="png")
             cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(n//256,text,observer))
 

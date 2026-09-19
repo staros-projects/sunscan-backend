@@ -240,19 +240,19 @@ def sharpenImage(image, level):
         image (numpy.ndarray): Input image.
 
     Returns:
-        numpy.ndarray: Sharpened image.
+        numpy.ndarray: Sharpened image, the input image is left untouched.
     """
     for i in range(0,level):
         # Apply Gaussian blur with a 9x9 kernel and sigma of 10.0
         gaussian_3 = cv2.GaussianBlur(image, (9,9), 10.0)
-        # Sharpen the image by subtracting the blurred image
-        image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
+        # Sharpen the image by subtracting the blurred image (no dst: the caller may still need its image)
+        image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0)
 
         if (i <2):
             # Apply Gaussian blur with a 3x3 kernel and sigma of 8.0
             gaussian_3 = cv2.GaussianBlur(image, (3,3), 8.0)
             # Sharpen the image one more time
-            image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
+            image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0)
     return image
 
 def create_surface_image(wd, frames, helium, level, header, observer, color, cercle, desc=''):

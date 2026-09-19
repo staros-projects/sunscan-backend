@@ -2,6 +2,15 @@
 
 The version is `BACKEND_API_VERSION` in `app/main.py`. The app reads it from `GET /sunscan/stats` (`backend_api_version`).
 
+## 2.1.2 (2026-09-19)
+
+### Fixed
+
+- **The raw colour image of a stack was sharpened.** A stack comes in two versions, raw and sharpened, but `stacked_color_N_raw.jpg` was the same image as `stacked_color_N_sharpen.jpg`: the sharpening wrote into the image it was given, so the raw stack was already sharpened when the colour images were made. The raw colour image is now made from the raw stack.
+  - Every other image of a stack is unchanged, pixel for pixel: surface and continuum, raw and sharpened, and the negative, which is built on the sharpened stack as the negative of a single scan is.
+  - The images of single scans are unchanged too.
+  - Stacks already created are not rebuilt: stack the scans again to get the raw colour image.
+
 ## 2.1.1 (2026-09-19)
 
 First packaged release of the 2.1 series: `sunscan_backend_source.zip` also contains everything listed under 2.1.0.
