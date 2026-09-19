@@ -1,6 +1,6 @@
-# Tags des stacks et des animations, et correction de leur date
+# Tags des stacks et des animations, date d'observation, et correction de leur date
 
-Deux changements sur `GET /sunscan/stacked` et `GET /sunscan/animated`. Rien ne change pour les scans.
+Trois changements sur `GET /sunscan/stacked` et `GET /sunscan/animated`. Rien ne change pour les scans.
 
 ## 1. Corrigé : un stack envoyé sur SpectroSolHub remontait en tête de liste
 
@@ -49,9 +49,31 @@ Taguer un stack ne change plus sa date ni sa place dans la liste (c'est le même
 
 `defaults.line` de `POST /spectrosolhub/scan/` prend maintenant le tag du stack en priorité. Un ancien stack tagué à la main propose donc sa raie (`line_from_tag: true`) ; il faut toujours demander sa date d'observation (`date_known: false`).
 
+## 3. Nouveau : la date d'observation, `observation_date`
+
+Chaque élément des deux listes porte maintenant `observation_date`, en UTC (`"2026-09-18T08:41:00Z"`), ou `null` si elle n'est pas connue. À afficher à la place de `creation_date`, qui ne dit que quand le stack a été fabriqué (parfois des mois après l'observation).
+
+- **Stack** : la moyenne des heures de tous ses scans. C'est exactement l'heure écrite dans le filigrane de ses images (« 3 stacked images - 2026/09/18 08:41:00 UT »), vérifié à la seconde.
+- **Animation** : l'heure de son premier scan.
+- **Créés avant cette version** : `null`. L'heure n'existe que dans les pixels du filigrane, le backend ne la devine pas.
+
+Elle est enregistrée à la création, à côté des images (`sunscan_sources.json` : scans sources, raie, observateur, première et dernière heure, heure moyenne). Un stack n'a pas de fichier FITS : ce fichier joue le rôle de son en-tête.
+
+**Envoi sur SpectroSolHub : rien à demander à l'utilisateur pour un stack récent.** `POST /spectrosolhub/scan/` répond `date_known: true` avec cette même date dans `defaults.observation_date`, la raie vient du tag, et l'envoi les met dans la session et dans les métadonnées de chaque image (`dateObs`, `spectralLine`, et maintenant `observer`, le nom passé au stacking). Avant ce changement la date envoyée était le milieu entre le premier et le dernier scan : identique pour 2 scans, différente du filigrane à partir de 3.
+
 ## Compatibilité
 
 | App | Backend | Résultat |
 |---|---|---|
 | ancienne | nouveau | inchangé : champs en plus ignorés, et l'ordre de la liste est corrigé sans rien faire |
-| nouvelle | ancien | pas de champ `tags` dans la réponse : masquer le filtre, comme pour les scans. `?tag=` est ignoré par un ancien backend |
+| nouvelle | ancien | pas de champ `tags` dans la réponse : masquer le filtre, comme pour les scans. `?tag=` est ignoré par un ancien backend. Pas de `observation_date` non plus : afficher `creation_date`, comme pour un ancien stack (`null`) |
+
+## Ce que l'app a à faire
+
+Rien d'obligatoire, rien ne casse. Trois ajouts possibles, indépendants :
+
+1. **Filtre par tag** sur les onglets stacks et animations : réutiliser celui des scans, affiché si `tags` est présent dans la réponse.
+2. **Taguer un stack** : le sélecteur de raie des scans, avec `filename: stack.path`.
+3. **Afficher `observation_date`** quand elle n'est pas `null`, sinon `creation_date` comme aujourd'hui. Attention au format : `observation_date` est une chaîne ISO en UTC, `creation_date` des secondes Unix.
+
+L'écran d'envoi SpectroSolHub ne change pas : il suit déjà `date_known` et `line_from_tag`, qui passent simplement à `true` plus souvent.

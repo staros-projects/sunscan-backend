@@ -273,7 +273,7 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
     if not os.path.exists(work_dir):
         os.mkdir(work_dir)
     # The directory is named after now : keep the scans, their line and their dates (upload to SpectroSolHub)
-    save_sources(work_dir, 'stack', paths)
+    save_sources(work_dir, 'stack', paths, observer)
 
     watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime+' UT'
     watermark_txt_t = watermark_txt

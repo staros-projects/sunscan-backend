@@ -221,7 +221,7 @@ def process_helium(WorkDir, frames, cercle, header, observer, watermark_fct, Col
     result_image = result_image.astype(np.uint16)
 
     res = process_and_save_images(cc, result_image, cercle, WorkDir, 'sunscan_helium_cont', watermark_fct, header, observer, 'He I line (D3) - 5875.65 Å')
-    Colorise_Image('heI', res, WorkDir, header, observer)
+    Colorise_Image('heI', res, WorkDir, header, observer, desc='He I line (D3) - 5875.65 Å')
     create_solar_planisphere(os.path.join(WorkDir,'sunscan_helium_cont.png'))
     coef = 0.6
     result_image = image1 + coef * image2_transformed

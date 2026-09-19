@@ -151,6 +151,9 @@ def process_scan(callback, scan, progress=None):
     # only if the spectrum confirms the line since the tag alone can't be trusted
     hepsilon = HEpsilonPlanes() if color == 'caIIH' and not helium else None
 
+    # Label of the line written on its images, as on the stacks: blank when the scan has no tag, or an unknown one
+    line_desc = cfg.LineDict.get(color, '')
+
     # Steps this processing goes through, to report its progress
     steps = list(PROGRESS_STEPS_RECON)
     if helium:
@@ -186,18 +189,18 @@ def process_scan(callback, scan, progress=None):
         else:
             # Create and save surface image
             report('image_surface')
-            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color, cercle)
+            raw = create_surface_image(WorkDir, frames, helium, surfaceSharpLevel, header, observer, color, cercle, line_desc)
             # Create and save continuum image
             report('image_continuum')
             create_continuum_image(WorkDir, frames, contSharpLevel, header, observer)
             # Create and save prominence (protus) image
             report('image_prominences')
-            create_protus_image(WorkDir, cv2.flip(raw,0), cercle,proSharpLevel, header, observer, 'sunscan_protus')
+            create_protus_image(WorkDir, cv2.flip(raw,0), cercle,proSharpLevel, header, observer, 'sunscan_protus', line_desc)
             # If doppler contrast is enabled, create and save doppler image
             print('doppler:', dopcont)
             if dopcont and process_doppler:
                 report('image_doppler')
-                create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color)
+                create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color, line_desc)
             if hepsilon_frames:
                 report('image_hepsilon')
                 try:
@@ -252,7 +255,7 @@ def sharpenImage(image, level):
             image = cv2.addWeighted(image, 1.5, gaussian_3, -0.5, 0, image)
     return image
 
-def create_surface_image(wd, frames, helium, level, header, observer, color, cercle):
+def create_surface_image(wd, frames, helium, level, header, observer, color, cercle, desc=''):
     """
     Create and save various surface images of the sun.
 
@@ -307,7 +310,7 @@ def create_surface_image(wd, frames, helium, level, header, observer, color, cer
    
     # Save CLAHE image as PNG and JPG
     try:
-        cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'), apply_watermark_if_enable(cc//256,header,observer))
+        cv2.imwrite(os.path.join(wd,'sunscan_clahe.jpg'), apply_watermark_if_enable(cc//256,header,observer, desc))
         cv2.imwrite(os.path.join(wd,'sunscan_clahe.png'),cc)
         create_solar_planisphere(os.path.join(wd,'sunscan_clahe.png'))
         save_as_fits(os.path.join(wd,'sunscan_clahe.fits'), cc, header)
@@ -318,13 +321,35 @@ def create_surface_image(wd, frames, helium, level, header, observer, color, cer
     except Exception as e:
         print(e)
 
-    Colorise_Image(color, cc, wd, header, observer)
+    # A scan processed again after its tag was changed: the images its new line does not produce
+    # must not stay, they would show the previous line
+    if not Colorise_Image(color, cc, wd, header, observer, desc=desc):
+        remove_images(wd, ['sunscan_color.jpg', 'sunscan_color_proj.jpg'])
 
     tag_enabled_for_negative = ['halpha', 'hbeta', 'hgamma', 'hdelta', 'hepsilon']
     
     if color in tag_enabled_for_negative:
-        create_negative_surface_image(wd, cc, cercle, header, observer)
+        create_negative_surface_image(wd, cc, cercle, header, observer, desc=desc)
+    else:
+        remove_images(wd, ['sunscan_negative.jpg', 'sunscan_negative.png', 'sunscan_negative.fits'])
     return raw
+
+def remove_images(wd, names):
+    """
+    Remove the images left in a scan by a previous processing. Never raises.
+
+    Args:
+        wd (str): Working directory of the scan.
+        names (list): File names to remove, missing ones are skipped.
+    """
+    for name in names:
+        try:
+            os.remove(os.path.join(wd, name))
+            print('- removed : ', name)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            print(e)
 
 def apply_watermark_if_enable(frame, header, observer, desc=''):
     print('- watermark : ', observer, desc)
@@ -365,7 +390,7 @@ def get_text_position(image, padding_from_bottom=50, padding_from_left=20):
     # Position the text in the bottom-left corner with some padding
     return (padding_from_left, height - padding_from_bottom)  # Padding of Npx from the left and bottom
 
-def create_negative_surface_image(wd, cc, cercle, header, observer, return_image=False):
+def create_negative_surface_image(wd, cc, cercle, header, observer, return_image=False, desc=''):
     """
     Negative surface with bright prominences and clean black sky.
     - Surface: stretched + inverted
@@ -436,7 +461,7 @@ def create_negative_surface_image(wd, cc, cercle, header, observer, return_image
 
     filename = 'sunscan_negative'
     cv2.imwrite(os.path.join(wd, filename + '.jpg'),
-                apply_watermark_if_enable(final_image // 256, header, observer))
+                apply_watermark_if_enable(final_image // 256, header, observer, desc))
     cv2.imwrite(os.path.join(wd, filename + '.png'), final_image)
     save_as_fits(os.path.join(wd, filename + '.fits'), final_image, header)
 
@@ -478,7 +503,7 @@ def create_continuum_image(wd, frames, level, header, observer):
         # cv2.imshow('clahe',cc)
         # cv2.waitKey(10000)
 
-def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
+def create_protus_image(wd, raw, cercle, level, header, observer, name=None, desc=''):
     """
     Create and save a prominence (protus) image of the sun.
     """
@@ -521,7 +546,7 @@ def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
 
     # Save as PNG and JPG
     if name:
-        cv2.imwrite(os.path.join(wd, name+'.jpg'), apply_watermark_if_enable(cc//256,header,observer))
+        cv2.imwrite(os.path.join(wd, name+'.jpg'), apply_watermark_if_enable(cc//256,header,observer, desc))
         cv2.imwrite(os.path.join(wd, name+'.png'), cc)
     else:
         return cc
@@ -554,7 +579,7 @@ def create_hepsilon_images(wd, frames, cercle, level, header, observer):
     cv2.imwrite(os.path.join(wd,'sunscan_hepsilon.jpg'), apply_watermark_if_enable(cc//256,header,observer, desc))
     cv2.imwrite(os.path.join(wd,'sunscan_hepsilon.png'),cc)
     save_as_fits(os.path.join(wd,'sunscan_hepsilon.fits'), cc, header)
-    Colorise_Image('hepsilon', cc, wd, header, observer, planisphere=False, filename='sunscan_hepsilon_color')
+    Colorise_Image('hepsilon', cc, wd, header, observer, planisphere=False, filename='sunscan_hepsilon_color', desc=desc)
 
     # -- PROMINENCES --
     wi=int(cercle[2])
@@ -592,7 +617,7 @@ def create_hepsilon_images(wd, frames, cercle, level, header, observer):
     cv2.imwrite(os.path.join(wd,'sunscan_hepsilon_protus.jpg'), apply_watermark_if_enable(protus//256,header,observer, desc))
     cv2.imwrite(os.path.join(wd,'sunscan_hepsilon_protus.png'), protus)
 
-def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
+def create_doppler_image(wd, frames, cercle, header, observer, doppler_color, desc=''):
     """
     Create and save a Doppler image of the sun.
 
@@ -663,7 +688,7 @@ def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
                 img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
 
             # sauvegarde en png 
-            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
+            cv2.imwrite(os.path.join(wd,'sunscan_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer, desc))
             cv2.imwrite(os.path.join(wd,'sunscan_doppler.png'),img_doppler)
             create_solar_planisphere(os.path.join(wd,'sunscan_doppler.png'))
 
@@ -704,7 +729,7 @@ def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
                 img_doppler = cv2.cvtColor(hsv_mod, cv2.COLOR_HSV2RGB)
                 
 
-            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer))
+            cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.jpg'),apply_watermark_if_enable(img_doppler, header, observer, desc))
             cv2.imwrite(os.path.join(wd,'sunscan_protus_doppler.png'),img_doppler)
             
                 
@@ -784,9 +809,10 @@ def adjust_gamma(image, gamma=1.0):
 	# apply gamma correction using the lookup table
 	return cv2.LUT(image, table)
 
-def Colorise_Image(color, frame_contrasted, wd, header, observer, planisphere=True, filename='sunscan_color'):
+def Colorise_Image(color, frame_contrasted, wd, header, observer, planisphere=True, filename='sunscan_color', desc=''):
+    # Returns True when the image is written: a scan without tag, or a line without colour, has none
     if not color:
-        return
+        return False
     
     print(color)
     
@@ -837,9 +863,11 @@ def Colorise_Image(color, frame_contrasted, wd, header, observer, planisphere=Tr
         else:
             img_color=im
         
-        cv2.imwrite(os.path.join(wd,filename+'.jpg'),apply_watermark_if_enable(img_color, header, observer))
+        cv2.imwrite(os.path.join(wd,filename+'.jpg'),apply_watermark_if_enable(img_color, header, observer, desc))
         if planisphere:
             create_solar_planisphere(os.path.join(wd,filename+'.jpg'))
+        return True
+    return False
 
 def save_as_fits(path, image, header):
     DiskHDU=fits.PrimaryHDU(image,header)

@@ -1,6 +1,7 @@
 import os
 import psutil
 import time
+import calendar
 import re
 import json
 from collections import Counter
@@ -75,7 +76,32 @@ def read_sources(path):
     except Exception as e:
         return None
 
-def save_sources(work_dir, kind, paths):
+def _utc_timestamp(date):
+    return calendar.timegm(time.strptime(date[:19], '%Y-%m-%dT%H:%M:%S'))
+
+def _utc_date(timestamp):
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(timestamp))
+
+def get_observation_date(sources):
+    """
+    UTC date of the observation of a stack or an animation ('YYYY-MM-DDTHH:MM:SSZ'), from read_sources : the mean
+    of the scans of a stack, which is the date written on its images, and the first scan of an animation.
+    None when it is not known : made before SOURCES_FILE, or from such stacks. Never the date of the directory.
+    """
+    try:
+        if not sources or not sources.get('date_first') or not sources.get('date_last'):
+            return None
+        if sources.get('kind') == 'animation':
+            return _utc_date(_utc_timestamp(sources['date_first']))
+        if sources.get('date_mean'):
+            return _utc_date(_utc_timestamp(sources['date_mean']))
+        # Written before date_mean : the same mean, from the names of the directories of the scans
+        dates = [re.search(r'sunscan_(\d{4})_(\d{2})_(\d{2})-(\d{2})_(\d{2})_(\d{2})$', d) for d in sources['sources']]
+        return _utc_date(int(sum(calendar.timegm(tuple(int(g) for g in m.groups())) for m in dates) / len(dates)))
+    except (ValueError, TypeError, KeyError, AttributeError, ZeroDivisionError):
+        return None
+
+def save_sources(work_dir, kind, paths, observer=''):
     """
     Record what a new stack or animation is made of. Never raises : it must not fail a stacking.
 
@@ -83,6 +109,7 @@ def save_sources(work_dir, kind, paths):
         work_dir (str): Directory of the new stack or animation.
         kind (str): 'stack' or 'animation'.
         paths (list): Sources as sent by the frontend : SER files or directories of scans, or directories of stacks.
+        observer (str): Observer written on the images, blank when the watermark is disabled.
     """
     try:
         sources, dates, tag, other_tag = [], [], '', ''
@@ -106,8 +133,10 @@ def save_sources(work_dir, kind, paths):
             else:
                 dates.append(None)
         known = None not in dates and len(dates) > 0
-        meta = {'kind': kind, 'sources': sources, 'count': len(sources), 'line': tag,
-                'date_first': min(dates) if known else None, 'date_last': max(dates) if known else None}
+        # date_mean : same mean as the one dedistor.stack writes on the images
+        meta = {'kind': kind, 'sources': sources, 'count': len(sources), 'line': tag, 'observer': (observer or '').strip(),
+                'date_first': min(dates) if known else None, 'date_last': max(dates) if known else None,
+                'date_mean': _utc_date(int(sum(_utc_timestamp(d) for d in dates) / len(dates))) if known else None}
         with open(os.path.join(work_dir, SOURCES_FILE), 'w') as d:
             json.dump(meta, d)
         # Same tag_<key> file as the scans, to filter the stacks and the animations by line : the line written
@@ -224,7 +253,7 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
                     if match:
                         stacked_img_count = match.group(2)
         if len(dirs) ==0 and stacking_dirname:                    
-            scans.append({'path':stacking_dirname, 'stacked_img_count':stacked_img_count, 'images':images, 'creation_date':get_creation_date(stacking_dirname), 'tag':get_tag(stacking_dirname)} | hub_mark(stacking_dirname))
+            scans.append({'path':stacking_dirname, 'stacked_img_count':stacked_img_count, 'images':images, 'creation_date':get_creation_date(stacking_dirname), 'observation_date':get_observation_date(read_sources(stacking_dirname)), 'tag':get_tag(stacking_dirname)} | hub_mark(stacking_dirname))
     scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
     return scans  
 
@@ -260,7 +289,7 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
                         images.append(file_path)
 
         if len(dirs) ==0 and stacking_dirname:                    
-            scans.append({'path':stacking_dirname, 'images':images, 'creation_date':get_creation_date(stacking_dirname), 'tag':get_tag(stacking_dirname)} | hub_mark(stacking_dirname))
+            scans.append({'path':stacking_dirname, 'images':images, 'creation_date':get_creation_date(stacking_dirname), 'observation_date':get_observation_date(read_sources(stacking_dirname)), 'tag':get_tag(stacking_dirname)} | hub_mark(stacking_dirname))
     scans = sorted(scans, key=lambda x: x['creation_date'], reverse=True)
     return scans  
 

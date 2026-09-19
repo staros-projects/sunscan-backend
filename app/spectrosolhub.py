@@ -40,7 +40,7 @@ from threading import Lock, Thread
 
 from config import LineDict
 from scan_progress import ScanProgress, scan_key
-from storage import images_type, read_sources, SPECTROSOLHUB_FILE
+from storage import images_type, read_sources, get_observation_date, SPECTROSOLHUB_FILE
 
 DEFAULT_BASE_URL = 'https://spectrosolhub.com'
 # Other server, for the tests only
@@ -455,23 +455,25 @@ def _info(item, directory):
     """
     What is known about a scan, a stack or an animation : {date, line, header, count, notes}.
 
-    The date of a stack is the middle of its scans, the one of an animation is its first scan. It is
-    None for the stacks and animations made before their sources were recorded : their directory only
-    tells when they were created, the frontend has to ask the date of the observation.
+    The date of a stack is the mean of its scans, the one written on its images, and the one of an
+    animation is its first scan (storage.get_observation_date). It is None for the stacks and animations
+    made before their sources were recorded : their directory only tells when they were created, the
+    frontend has to ask the date of the observation.
     """
     if item == 'scan':
         header = _fits_header(directory)
         return {'date': _observation_date(directory, header), 'line': _scan_line(directory),
-                'header': header, 'count': 1, 'notes': ''}
+                'header': header, 'count': 1, 'notes': '', 'observer': ''}
     sources = read_sources(directory) or {}
     count = sources.get('count') or _derived_images(item, directory)[1]
     # Its own tag first : the one of its scans when it was created, or set by hand since (older stacks, wrong tag)
     info = {'date': None, 'line': _scan_line(directory) or (sources.get('line') if sources.get('line') in HUB_LINES else ''),
-            'header': None, 'count': count, 'notes': ''}
+            'header': None, 'count': count, 'notes': '', 'observer': str(sources.get('observer') or '').strip()}
     first, last = sources.get('date_first'), sources.get('date_last')
     try:
-        if first and last:
-            info['date'] = _iso(_timestamp(first) if item == 'animation' else (_timestamp(first) + _timestamp(last)) // 2)
+        date = get_observation_date(sources)
+        if date:
+            info['date'] = _iso(_timestamp(date))
             span = f'{first[:10]} {first[11:19]} to ' + (last[11:19] if last[:10] == first[:10] else f'{last[:10]} {last[11:19]}')
             info['notes'] = f'{item.capitalize()} of {count} scans, {span} UT'
     except (ValueError, TypeError):
@@ -601,16 +603,16 @@ def _session_request(title, date, line, notes, software_version):
     }
 
 
-def _image_metadata(path, image_line, date, header, solar):
-    """Same fields as the ImageMetadata of JSol'Ex, as INTI Partner does."""
+def _image_metadata(path, image_line, date, header, solar, observer=''):
+    """Same fields as the ImageMetadata of JSol'Ex, as INTI Partner does. observer : the one of a stack, which has no FITS header."""
     metadata = dict(solar)
     if date:
         metadata['dateObs'] = date
     if header is not None:
         metadata.update(_disk_geometry(path, header))
         observer = str(header.get('OBSERVER', '')).strip()
-        if observer:
-            metadata['observer'] = observer
+    if observer:
+        metadata['observer'] = observer
     if image_line:
         metadata['spectralLine'], metadata['wavelengthAngstroms'] = HUB_LINES[image_line]
     else:
@@ -792,7 +794,7 @@ def start_upload(filename, images=None, title='', notes='', line='', publish=Tru
             job_images.append({'kind': kind, 'path': image['_path'], 'size': image['size'],
                                'hub_kind': image['_hub_kind'], 'title': image['_title'],
                                'content_type': image['_content_type'],
-                               'metadata': _image_metadata(image['_path'], image_line, date, info['header'], solar)})
+                               'metadata': _image_metadata(image['_path'], image_line, date, info['header'], solar, info['observer'])})
         key = scan_key(filename)
         job = {'key': key, 'token': token, 'directory': directory, 'images': job_images, 'publish': bool(publish),
                'session': _session_request((title or '').strip() or _default_title(item, info, line), date, line,

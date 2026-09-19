@@ -328,7 +328,7 @@ Le dossier d'un stack ou d'une animation porte la date de sa **création**, pas 
  "notes": "Stack of 2 scans, 2026-09-18 08:25:51 to 08:33:06 UT", "publish": true}
 ```
 
-  La date d'un stack est le milieu de ses scans, celle d'une animation est son premier scan. Pour une animation de stacks, ce sont les dates des stacks sources, si elles sont connues.
+  La date d'un stack est la moyenne de ses scans, celle qui est écrite dans le filigrane de ses images ; celle d'une animation est son premier scan. C'est le champ `observation_date` des listes (voir `tags-stacks-animations.md`). Le nom d'observateur passé au stacking est envoyé avec chaque image. Pour une animation de stacks, ce sont les dates des stacks sources, si elles sont connues.
 
 - **Tous ceux créés avant** (132 stacks et 44 animations sur le SunScan de développement) : `date_known` vaut `false`, `observation_date` vaut `null`, `line_from_tag` vaut `false`, sauf si le stack a été tagué à la main depuis (voir `tags-stacks-animations.md`) : sa raie est alors proposée. L'app doit **demander la date et l'heure de l'observation** (en UTC) et la raie, puis les envoyer :
 

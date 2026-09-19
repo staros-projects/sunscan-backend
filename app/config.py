@@ -24,5 +24,5 @@ LineDict = {
   'mgI3':'Mg I line - 5183 Å',
   'heI':'He I line (D3) - 5875.65 Å',
   'caIIK':'Ca II K line - 3934 Å',
-  'caIIH':'Ca II H line - 3968  Å',
+  'caIIH':'Ca II H line - 3968 Å',
 }
