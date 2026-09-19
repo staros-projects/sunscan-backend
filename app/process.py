@@ -9,7 +9,9 @@ from Inti_recon2 import solex_proc2
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
 from helium import process_helium, create_circular_mask, blend_images
+from hepsilon import HEpsilonPlanes
 from mapping import create_solar_planisphere
+import config as cfg
 
 # Steps reported to the frontend while a scan is processed: (key, weight).
 # The weight is the rough share of the total processing time, it sets how much
@@ -17,6 +19,7 @@ from mapping import create_solar_planisphere
 PROGRESS_STEPS_RECON = [('reading_scan', 30), ('building_disk', 15), ('correcting_geometry', 30)]
 PROGRESS_STEPS_IMAGES = [('image_surface', 12), ('image_continuum', 3), ('image_prominences', 3)]
 PROGRESS_STEP_DOPPLER = ('image_doppler', 12)
+PROGRESS_STEP_HEPSILON = ('image_hepsilon', 6)
 PROGRESS_STEPS_HELIUM = [('image_helium', 25)]
 
 
@@ -144,6 +147,10 @@ def process_scan(callback, scan, progress=None):
         color = tag_value
         print('auto extracted line tag :'+color)
 
+    # A Ca II H scan also holds the H epsilon line in its red wing: two more planes are rebuilt for it,
+    # only if the spectrum confirms the line since the tag alone can't be trusted
+    hepsilon = HEpsilonPlanes() if color == 'caIIH' and not helium else None
+
     # Steps this processing goes through, to report its progress
     steps = list(PROGRESS_STEPS_RECON)
     if helium:
@@ -152,14 +159,22 @@ def process_scan(callback, scan, progress=None):
         steps += PROGRESS_STEPS_IMAGES
         if dopcont and process_doppler:
             steps.append(PROGRESS_STEP_DOPPLER)
+        if hepsilon is not None:
+            steps.append(PROGRESS_STEP_HEPSILON)
     report = ProgressReporter(progress, steps)
 
     # Error key sent to the frontend if the processing fails, depends on how far it went
     error = 'reconstruction_failed'
     try:
         # Process the SER file using solex_proc function
-        frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param, progress=report)
+        frames, header, cercle, range_dec, geom, polynome = solex_proc(serfile, Shift, Flags, ratio_fixe, ang_tilt, poly, data_entete, ang_P, solar_dict, param, progress=report, extra_shifts=hepsilon)
         error = 'image_generation_failed'
+
+        # The H epsilon planes come last: the images below expect the usual frames only
+        hepsilon_frames = []
+        if hepsilon is not None and hepsilon.shifts:
+            hepsilon_frames = frames[-len(hepsilon.shifts):]
+            frames = frames[:-len(hepsilon.shifts)]
 
         header = update_header(WorkDir, header, observer)
 
@@ -183,6 +198,13 @@ def process_scan(callback, scan, progress=None):
             if dopcont and process_doppler:
                 report('image_doppler')
                 create_doppler_image(WorkDir, frames, cercle, header, observer, doppler_color)
+            if hepsilon_frames:
+                report('image_hepsilon')
+                try:
+                    create_hepsilon_images(WorkDir, hepsilon_frames, cercle, surfaceSharpLevel, header, observer)
+                except Exception as e:
+                    # H epsilon comes on top of the Ca II H images, it must never fail the scan
+                    print("error hepsilon", e)
         # Call the callback function to indicate successful completion
         callback(serfile, 'completed')
     except Exception as e:
@@ -503,6 +525,72 @@ def create_protus_image(wd, raw, cercle, level, header, observer, name=None):
         cv2.imwrite(os.path.join(wd, name+'.png'), cc)
     else:
         return cc
+
+def create_hepsilon_images(wd, frames, cercle, level, header, observer):
+    """
+    Create and save the H epsilon images out of the two extra planes of a Ca II H scan.
+
+    Args:
+        wd (str): Working directory to save images.
+        frames (list): H epsilon plane, then the plane at the same distance on the other side of the Ca II H core.
+        cercle (list): Centre and radii of the solar disk.
+        level (int): Sharpening level of the surface image.
+
+    Returns:
+        None
+    """
+    desc = cfg.LineDict['hepsilon']
+
+    # -- SURFACE --
+    # Same processing as the CLAHE surface image
+    clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(2,2))
+    cl1 = clahe.apply(frames[0])
+    Seuil_haut=np.percentile(cl1,99.9999)*1.05
+    cc=np.clip(cl1*(65000/Seuil_haut), 0, 65535)
+    cc=np.array(cc, dtype='uint16')
+    cc=cv2.flip(cc,0)
+    cc = sharpenImage(cc, level)
+
+    cv2.imwrite(os.path.join(wd,'sunscan_hepsilon.jpg'), apply_watermark_if_enable(cc//256,header,observer, desc))
+    cv2.imwrite(os.path.join(wd,'sunscan_hepsilon.png'),cc)
+    save_as_fits(os.path.join(wd,'sunscan_hepsilon.fits'), cc, header)
+    Colorise_Image('hepsilon', cc, wd, header, observer, planisphere=False, filename='sunscan_hepsilon_color')
+
+    # -- PROMINENCES --
+    wi=int(cercle[2])
+    he=int(cercle[3])
+    r=min(wi,he)
+    if r <= 0:
+        # no disk found, as for a partial scan
+        return
+    # The stray light halo is the same in both planes, and so is the light of the limb since they are at the
+    # same level in the Ca II H wing, but only the first one holds the emission of the prominences:
+    # their difference removes the halo, which hides them in the H epsilon plane alone
+    diff = frames[0].astype(np.float64) - frames[1].astype(np.float64)
+    diff = cv2.GaussianBlur(diff, (0,0), 1.5)
+
+    height, width = diff.shape
+    y, x = np.ogrid[:height, :width]
+    dist = np.sqrt((x - cercle[0])**2 + (y - cercle[1])**2)
+    # Noise of the sky around the disk, not further: the corners of the image are filled with a constant.
+    # The median deviation ignores the prominences
+    sky = diff[(dist > r*1.05) & (dist < r*1.3)]
+    noise = 1.4826 * np.median(np.abs(sky - np.median(sky)))
+    Seuil_bas = np.median(sky) + 4*noise
+    # The chromosphere makes a thin bright ring at the limb: the upper threshold is taken further out
+    around = diff[(dist > r*1.02) & (dist < r*1.3)]
+    Seuil_haut = max(np.percentile(around, 99.99), Seuil_bas + 10*noise)
+
+    protus = np.clip((diff-Seuil_bas)/(Seuil_haut-Seuil_bas), 0, 1)
+    protus = np.power(protus, 0.7)*65535
+    # Same mask of the disk as the prominence image
+    r=int(r- round(r*0.002))-4
+    mask = create_circular_mask((height, width), (cercle[0], cercle[1]), r, 3)
+    protus = blend_images(protus, np.zeros(protus.shape), mask)
+    protus = cv2.flip(protus, 0)
+
+    cv2.imwrite(os.path.join(wd,'sunscan_hepsilon_protus.jpg'), apply_watermark_if_enable(protus//256,header,observer, desc))
+    cv2.imwrite(os.path.join(wd,'sunscan_hepsilon_protus.png'), protus)
 
 def create_doppler_image(wd, frames, cercle, header, observer, doppler_color):
     """

@@ -221,7 +221,7 @@ except ImportError :
     from serfilesreader import Serfile
 
 
-def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param, progress=None):
+def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_P, solar_dict,param, progress=None, extra_shifts=None):
     """
     ----------------------------------------------------------------------------
     Reconstuit l'image du disque a partir de l'image moyenne des trames et
@@ -235,6 +235,9 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
     progress: optionnel, fonction progress(etape, fraction) appelee pour suivre
     l'avancement, fraction de 0 a 1 dans l'etape 'reading_scan', 'building_disk'
     ou 'correcting_geometry'
+    extra_shifts: optionnel, fonction extra_shifts(image moyenne, [a,b,c], y1, y2)
+    appelee une fois la raie localisee, renvoie les decalages en pixels de plans
+    a reconstruire en plus, places en fin de frames
     ----------------------------------------------------------------------------
     """
     #plt.gray()              #palette de gris si utilise matplotlib pour visu debug
@@ -687,10 +690,22 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
             logme('*******************************')
             range_dec=[0]
             kend=len(range_dec)
-     
 
-    
-    
+
+    # plans en plus demandes par l'appelant maintenant que la raie est localisee
+    # en fin de liste pour ne pas changer les indices des plans habituels
+    # une erreur ici ne doit pas empecher le traitement normal
+    n_extra=0
+    if extra_shifts is not None and len(range_dec)>1 and not (flag_volume or flag_pol or flag_weak):
+        try:
+            extra=list(extra_shifts(myimg, [a,b,c], PosRaieHaut, PosRaieBas))
+            range_dec=list(range_dec)+extra
+            n_extra=len(extra)
+            kend=len(range_dec)
+        except Exception as e:
+            logme('Plans supplementaires ignores : '+str(e))
+
+
     """
     ----------------------------------------------------------------------------
     ----------------------------------------------------------------------------
@@ -1404,8 +1419,10 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
         if sfit_onlyfinal==False:
             # sauvegarde en fits de l'image tilt
             img2=np.array(img2, dtype='uint16')
-            DiskHDU=fits.PrimaryHDU(img2,header=hdr)
-            DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[k]+'_tilt.fits'), overwrite='True')
+            # pas de fichier intermediaire pour les plans en plus
+            if k<kend-n_extra:
+                DiskHDU=fits.PrimaryHDU(img2,header=hdr)
+                DiskHDU.writeto(os.path.join(WorkDir,basefich+img_suff[k]+'_tilt.fits'), overwrite='True')
 
         progress('correcting_geometry', (k+0.6)/kend)
 
@@ -1736,9 +1753,12 @@ def solex_proc(serfile,Shift, Flags, ratio_fixe,ang_tilt, poly, data_entete,ang_
         
         # ajoute l'image a la liste
         frames.append(frame)
-        
 
-        
-        
-    return frames, hdr, cercleC, range_dec, geom, poly
+        # l'entete renvoyee reste celle du dernier plan habituel, pas celle d'un plan en plus
+        if k==kend-n_extra-1:
+            hdr_frames=hdr.copy()
+
+
+
+    return frames, hdr_frames, cercleC, range_dec, geom, poly
     

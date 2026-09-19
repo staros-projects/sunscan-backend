@@ -2,7 +2,7 @@ import os
 import cv2
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pathlib import Path
 
 from typing import List, Optional
@@ -12,6 +12,9 @@ from storage import get_scan_tag
 
 class PostProcessRequest(BaseModel):
     paths: List[str]
+    # Chosen by the frontend to follow a stacking or an animation on the 'job_progress_<job_id>' WebSocket
+    # channel, see docs/progression-stack-animation.md. Without it nothing is published and nothing changes.
+    job_id: Optional[str] = Field(None, pattern=r'^[A-Za-z0-9_-]{1,64}$')
     watermark: bool = False
     observer: str = ''
     description: str = ''
@@ -23,6 +26,11 @@ class PostProcessRequest(BaseModel):
     patch_size: int = 32 
     step_size: int = 10 
     intensity_threshold: int = 0
+
+# Share of the time of a GIF given to the preparation of its frames, the rest is its encoding. Measured on
+# the Pi 4 between 6 % (full size, average frames, bidirectional) and 58 % (default options) : a GIF takes
+# 1 to 4 s, this only smooths the progress between two GIFs.
+FRAMES_SHARE = 0.3
 
 def extract_datetime_from_path(image_path: str, date_format: str = "%Y_%m_%d-%H_%M_%S") -> str:
     """
@@ -83,12 +91,16 @@ def calculate_average_frame(frame1: Image.Image, frame2: Image.Image) -> Image.I
     """
     return ImageChops.blend(frame1, frame2, alpha=0.5)
 
-def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_path: Path, frame_duration: int, display_datetime: bool, resize_gif: bool, bidirectional: bool, add_average_frame: bool):
+def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_path: Path, frame_duration: int, display_datetime: bool, resize_gif: bool, bidirectional: bool, add_average_frame: bool, progress=None):
     """
     Create a GIF animation from a list of image paths.
+
+    progress (function): Optional, progress(fraction done of this GIF).
     """
     frames = []
-    for image_path in image_paths:
+    for index, image_path in enumerate(image_paths):
+        if progress:
+            progress(FRAMES_SHARE * index / len(image_paths))
         image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
         image = image // 256
         frame = Image.fromarray(image).convert("RGB")
@@ -121,6 +133,8 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
         frames += frames[::-1]  # Append reversed frames for bidirectional playback
 
 
+    if progress:
+        progress(FRAMES_SHARE)
     # Check if the output path contains "clahe" and create a preview gif
     if "helium_cont" in str(output_path).lower():
         # Resize the frames to 250px width and height

@@ -22,7 +22,8 @@ import shutil
 import zipfile
 import datetime
 import subprocess
-from typing import List
+import threading
+from typing import List, Optional
 from hashlib import md5
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -51,17 +52,19 @@ from camera_controller import CameraController
 
 from focus_analyzer import FocusAnalyzer
 
-from process import process_scan, get_fits_header
+from process import process_scan, get_fits_header, ProgressReporter
 from scan_progress import ScanProgress, scan_key
 import gallery
 from system_tuning import apply_system_tuning
 import network
+import pisugar_repair
+import spectrosolhub
 from animate import *
 from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '2.0.0'
+BACKEND_API_VERSION = '2.1.0'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -94,6 +97,19 @@ class WifiConnect(BaseModel):
 
 class WifiForget(BaseModel):
     ssid: str
+
+class HubLogin(BaseModel):
+    username: str
+    password: str
+    totp_code: str = ''
+
+class HubUpload(ScanBase):
+    images: List[str] | None = None
+    title: str = ''
+    notes: str = ''
+    line: str = ''
+    publish: bool = True
+    observation_date: str = ''
 
 class CameraControls(BaseModel):
     exp: float
@@ -131,6 +147,9 @@ app.q = queue.Queue()
 
 # Processing progress of the scans, written by the processing threads and sent by the WebSocket
 app.scanProgress = ScanProgress()
+
+# Progress of the stackings and of the animations, followed by the frontend with an id it chooses
+app.jobProgress = ScanProgress(channel='job_progress_', extra={'kind': '', 'current': 0, 'total': 0, 'path': ''})
 
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(
@@ -250,25 +269,60 @@ async def connect(request: Request):
     return JSONResponse(content=jsonable_encoder(du | version))
 
 @app.get("/sunscan/scans", response_class=JSONResponse)
-async def paginated_scans(page: int = 1, size: int = 10):
+async def paginated_scans(
+    page: int = 1,
+    size: int = 10,
+    tag: Optional[str] = None,
+    status: Optional[str] = Query(None, pattern="^(pending|completed|failed)$"),
+    date_from: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    hub_status: Optional[str] = Query(None, pattern="^(sent|not_sent)$"),
+):
     """
     Retrieve a list of all available scans.
-    
+
     This endpoint returns information about all scans stored in the system.
     It's used to provide an overview of available scan data to the user
     or other parts of the application.
-    
+
     Args:
-        request (Request): The incoming request object.
-    
+        page (int): Page number, starting at 1.
+        size (int): Number of scans per page.
+        tag (str, optional): Only return scans with this line tag (e.g. 'halpha'),
+            'none' for untagged scans.
+        status (str, optional): Only return 'pending', 'completed' or 'failed' scans.
+        date_from, date_to (str, optional): Only return scans acquired between these
+            days, 'YYYY-MM-DD', both inclusive.
+        hub_status (str, optional): Only return the scans whose images are on SpectroSolHub
+            ('sent') or not ('not_sent'), see docs/envoi-spectrosolhub.md.
+
+    Filters combine and apply before pagination.
+
     Returns:
-        JSONResponse: A JSON array containing information about each scan.
+        JSONResponse: total (filtered count), scans (requested page), and the scan
+            counts tags (per tag, '' for untagged scans), statuses, days ('YYYY-MM-DD')
+            and hub_statuses ('sent', 'not_sent').
+            Each count applies the other filters but not its own.
     """
-    scans = get_paginated_scans(page, size)
+    filters = {'tag': tag, 'status': status, 'date_from': date_from, 'date_to': date_to, 'hub_status': hub_status}
+    scans = get_paginated_scans(page, size, filters=filters)
     return JSONResponse(content=jsonable_encoder(scans))
 
+def _paginated_stacks(page, size, get_fct, tag, hub_status):
+    """
+    Stacks or animations, optionally only those of a line tag ('halpha', 'none' for the untagged ones) and
+    those sent ('sent') or not ('not_sent') to SpectroSolHub. With the counts tags ('' for the untagged ones)
+    and hub_statuses, computed as for the scans : each one with the other filter but not its own.
+    See docs/envoi-spectrosolhub.md and docs/tags-stacks-animations.md.
+    """
+    result = get_paginated_scans(page, size, get_fct, filters={'tag': tag, 'hub_status': hub_status}, counted=STACK_COUNTS)
+    # Both keys always present, as before the tags
+    result['hub_statuses'] = {'sent': 0, 'not_sent': 0} | result['hub_statuses']
+    return result
+
 @app.get("/sunscan/stacked", response_class=JSONResponse)
-async def paginated_stacked_scans(page: int = 1, size: int = 10):
+async def paginated_stacked_scans(page: int = 1, size: int = 10, tag: Optional[str] = None,
+                                  hub_status: Optional[str] = Query(None, pattern="^(sent|not_sent)$")):
     """
     Retrieve a list of all available stacked scans.
     
@@ -282,11 +336,12 @@ async def paginated_stacked_scans(page: int = 1, size: int = 10):
     Returns:
         JSONResponse: A JSON array containing information about each scan.
     """
-    scans = get_paginated_scans(page, size, get_stacked_scans)
+    scans = _paginated_stacks(page, size, get_stacked_scans, tag, hub_status)
     return JSONResponse(content=jsonable_encoder(scans))
 
 @app.get("/sunscan/animated", response_class=JSONResponse)
-async def paginated_animated_scans(page: int = 1, size: int = 10):
+async def paginated_animated_scans(page: int = 1, size: int = 10, tag: Optional[str] = None,
+                                   hub_status: Optional[str] = Query(None, pattern="^(sent|not_sent)$")):
     """
     Retrieve a list of all available animated scans.
     
@@ -300,7 +355,7 @@ async def paginated_animated_scans(page: int = 1, size: int = 10):
     Returns:
         JSONResponse: A JSON array containing information about each scan.
     """
-    scans = get_paginated_scans(page, size, get_animated_scans)
+    scans = _paginated_stacks(page, size, get_animated_scans, tag, hub_status)
     return JSONResponse(content=jsonable_encoder(scans))
 
 @app.get("/camera/imx477/connect", response_class=JSONResponse)
@@ -853,6 +908,82 @@ def networkHotspot():
         return _provisioning_error(e)
 
 
+# -- PiSugar firmware repair, see docs/reparation-pisugar.md --
+
+def _pisugar_error(e):
+    return JSONResponse(content={"status": "failed", "error": e.code, "detail": str(e)}, status_code=e.http_status)
+
+@app.get("/power/pisugar/status", response_class=JSONResponse)
+def pisugarStatus():
+    """Mode of the PiSugar microcontroller (needs_repair when stuck in bootloader) and last repair."""
+    return JSONResponse(content=pisugar_repair.status())
+
+@app.post("/power/pisugar/repair", response_class=JSONResponse)
+def pisugarRepair():
+    """
+    Reflash the PiSugar application firmware, only when the PiSugar is stuck in bootloader.
+    Answers right away (202), the progress and the result are in /power/pisugar/status.
+    """
+    try:
+        return JSONResponse(content=pisugar_repair.repair(), status_code=202)
+    except pisugar_repair.RepairError as e:
+        return _pisugar_error(e)
+
+
+# -- Upload of the images of a scan to SpectroSolHub, see docs/envoi-spectrosolhub.md --
+
+def _hub_error(e):
+    return JSONResponse(content={"status": "failed", "error": e.code, "detail": str(e)}, status_code=e.http_status)
+
+@app.get("/spectrosolhub/status", response_class=JSONResponse)
+def hubStatus(verify: bool = False):
+    """SpectroSolHub account known by the SunScan. verify=true checks it on the hub (needs an internet access) and returns its quota."""
+    return JSONResponse(content=spectrosolhub.status(verify))
+
+@app.post("/spectrosolhub/login", response_class=JSONResponse)
+def hubLogin(req: HubLogin):
+    """Log in to SpectroSolHub. Only the API token returned by the hub is kept, never the password."""
+    try:
+        return JSONResponse(content=spectrosolhub.login(req.username, req.password, req.totp_code))
+    except spectrosolhub.HubError as e:
+        return _hub_error(e)
+
+@app.post("/spectrosolhub/logout", response_class=JSONResponse)
+def hubLogout():
+    """Forget the SpectroSolHub account."""
+    return JSONResponse(content=spectrosolhub.logout())
+
+@app.post("/spectrosolhub/scan/", response_class=JSONResponse)
+def hubScan(scan: ScanBase):
+    """Images of a scan that can be sent, default values of the upload form and last upload of the scan."""
+    try:
+        return JSONResponse(content=spectrosolhub.describe(scan.filename))
+    except spectrosolhub.HubError as e:
+        return _hub_error(e)
+
+@app.post("/spectrosolhub/upload/", response_class=JSONResponse)
+def hubUpload(req: HubUpload):
+    """
+    Send images of a processed scan, a stack or an animation to SpectroSolHub. Answers right away (202), the upload runs in
+    the background and is followed on the 'spectrosolhub_upload_<key>' WebSocket channel.
+    """
+    try:
+        state = app.scanProgress.get(scan_key(req.filename))
+        if state and state['status'] == 'processing':
+            # The images are being written again
+            raise spectrosolhub.HubError('processing_in_progress', 'The scan is being processed', 409)
+        return JSONResponse(content=spectrosolhub.start_upload(req.filename, req.images, req.title, req.notes, req.line,
+                                                               req.publish, BACKEND_API_VERSION, req.observation_date),
+                            status_code=202)
+    except spectrosolhub.HubError as e:
+        return _hub_error(e)
+
+@app.post("/spectrosolhub/upload/status/", response_class=JSONResponse)
+def hubUploadStatus(scan: ScanBase):
+    """Last known state of the upload of a scan, same information as the WebSocket channel. status is 'unknown' when there is none."""
+    return JSONResponse(content=spectrosolhub.upload_status(scan.filename))
+
+
 @app.post("/sunscan/scan", response_class=JSONResponse)
 async def getScanDetails(scan:ScanBase, request: Request):
     scans = get_single_scan(scan.filename)
@@ -910,6 +1041,55 @@ async def getScanProcessStatus(scan:ScanBase):
     return JSONResponse(content={name: state[name] for name in ("key", "status", "percent", "step", "error", "detail")})
 
 
+# -- Progress of the stackings and of the animations, see docs/progression-stack-animation.md --
+
+# Seconds measured on the Pi 4 : the alignment of each scan, then the images of the stack whatever their number
+STACK_ALIGN_WEIGHT = 14
+STACK_WRITE_WEIGHT = 4
+
+# A stacking takes about 1 GB of RAM (measured) on a Pi that has 3.8 : never two at the same time
+_stack_lock = threading.Lock()
+
+class _Job:
+    """
+    Progress of a stacking or an animation on the 'job_progress_<job_id>' WebSocket channel. Same message as
+    the processing of a scan, followed by : kind ('stack' or 'animation'), number of the scan or of the GIF
+    in progress, their total, directory of the result once completed. Does nothing without a job_id.
+    """
+    def __init__(self, job_id, kind, steps):
+        self.id = job_id
+        self.counters = {'current': 0, 'total': 0}
+        self.reporter = None
+        if job_id:
+            app.jobProgress.start(job_id)
+            app.jobProgress.update(job_id, 'starting', 0, kind=kind)
+            self.reporter = ProgressReporter(lambda step, percent: app.jobProgress.update(job_id, step, percent, **self.counters), steps)
+
+    def report(self, step, fraction, current, total):
+        if self.reporter:
+            self.counters.update(current=current, total=total)
+            self.reporter(step, fraction)
+
+    def complete(self, path):
+        if self.id:
+            app.jobProgress.finish(self.id, 'completed', path=path, **self.counters)
+
+    def fail(self, error, detail, http_status):
+        """Final state of the channel and answer of the route for the frontends that gave a job_id."""
+        app.jobProgress.finish(self.id, 'failed', error, detail)
+        return JSONResponse(content={"status": "failed", "error": error, "detail": str(detail), "job_id": self.id},
+                            status_code=http_status)
+
+@app.get("/sunscan/process/job/{job_id}", response_class=JSONResponse)
+def getJobStatus(job_id: str):
+    """Last known state of a stacking or an animation, same fields as the WebSocket message. status 'unknown' if none."""
+    state = app.jobProgress.get(job_id)
+    if state is None:
+        state = {"key": job_id, "status": "unknown", "percent": 0, "step": "", "error": "", "detail": "",
+                 "kind": "", "current": 0, "total": 0, "path": ""}
+    names = ("status", "percent", "step", "error", "detail", "kind", "current", "total", "path")
+    return JSONResponse(content={"job_id": state["key"]} | {name: state[name] for name in names})
+
 @app.post("/sunscan/process/stack/")
 def process_stack(request: PostProcessRequest):
     required_files = {"clahe": False, "protus": False, "cont": False, "color":False, "helium":False, "helium_cont":False}
@@ -921,10 +1101,34 @@ def process_stack(request: PostProcessRequest):
                 matching_paths.append(path)
         if len(matching_paths) == len(request.paths):
             required_files[required_file] = True
+    job = _Job(request.job_id, 'stack', [('aligning', STACK_ALIGN_WEIGHT * len(request.paths)), ('writing_images', STACK_WRITE_WEIGHT)])
+    if request.job_id:
+        if not _stack_lock.acquire(blocking=False):
+            return job.fail('busy', 'A stacking is already running', 409)
+    else:
+        # The frontends that do not follow the stacking can not be told to try again : theirs waits for
+        # its turn, for them it is only a longer stacking
+        _stack_lock.acquire()
     start_time = time.perf_counter()
-    stack(request.paths, required_files, request.observer, request.patch_size, request.step_size, request.intensity_threshold)
+    try:
+        work_dir = stack(request.paths, required_files, request.observer, request.patch_size, request.step_size,
+                         request.intensity_threshold, progress=job.report)
+    except Exception as e:
+        if not request.job_id:
+            # Unchanged for the frontends that do not follow the stacking : HTTP 500
+            raise
+        logging.exception('stacking failed')
+        return job.fail('stacking_failed', e, 500)
+    finally:
+        _stack_lock.release()
     end_time = time.perf_counter()
     print(f" {end_time - start_time:.6f} secondes") 
+    if work_dir is None:
+        # The scans do not all have the images to stack, nothing was created. Unchanged without job_id : 200 null
+        return job.fail('missing_images', 'The scans do not all have a processed image to stack', 409) if request.job_id else None
+    path = os.path.normpath(work_dir)
+    job.complete(path)
+    return {"status": "completed", "job_id": request.job_id, "path": path}
 
 @app.post("/sunscan/process/animate/")
 def process_animate(request: PostProcessRequest):
@@ -955,18 +1159,11 @@ def process_animate(request: PostProcessRequest):
         # "stacked_color_*_sharpen.jpg": "stacked_cont_sharpen.gif",
     }
 
-    gifs_created = []
-
-    stacking_dir = './storage/animations'
-    os.makedirs(stacking_dir, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    work_dir = os.path.join(stacking_dir, timestamp)
-    os.makedirs(work_dir, exist_ok=True)
-
     # Vérifier si on est en mode stacking
     is_stacking_mode = any("stacking" in p for p in request.paths)
 
+    # GIFs to create : (images, name), listed first so that their number is known
+    todo = []
     if is_stacking_mode:
         # MODE STACKING
         for pattern, gif_name in gif_names_stacking.items():
@@ -987,19 +1184,7 @@ def process_animate(request: PostProcessRequest):
 
             # si on a trouvé des fichiers correspondants → créer le GIF
             if matching_paths:
-                output_gif_path = os.path.join(work_dir, gif_name)
-                create_gif(
-                    matching_paths,
-                    request.watermark,
-                    request.observer,
-                    output_gif_path,
-                    request.frame_duration,
-                    request.display_datetime,
-                    request.resize_gif,
-                    request.bidirectional,
-                    request.add_average_frame,
-                )
-                gifs_created.append(str(output_gif_path))
+                todo.append((matching_paths, gif_name))
 
     else:
         # MODE CLASSIQUE
@@ -1014,24 +1199,52 @@ def process_animate(request: PostProcessRequest):
      
             # Create GIF if all paths contain the required file
             if len(matching_paths) == len(request.paths):
-                output_gif_path = os.path.join(work_dir, gif_name)
-                create_gif(
-                    matching_paths,
-                    request.watermark,
-                    request.observer,
-                    output_gif_path,
-                    request.frame_duration,
-                    request.display_datetime,
-                    request.resize_gif,
-                    request.bidirectional,
-                    request.add_average_frame,
-                )
-                gifs_created.append(str(output_gif_path))
+                todo.append((matching_paths, gif_name))
 
-    if not gifs_created:
+    job = _Job(request.job_id, 'animation', [('creating_gif', 1)])
+    if not todo:
+        # Nothing is created any more in storage/animations in that case
+        if request.job_id:
+            return job.fail('missing_images', 'No GIFs were created. Ensure the required files exist.', 400)
         raise HTTPException(status_code=400, detail="No GIFs were created. Ensure the required files exist.")
 
-    return {"message": "GIFs created successfully", "gifs": gifs_created}
+    stacking_dir = './storage/animations'
+    os.makedirs(stacking_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    work_dir = os.path.join(stacking_dir, timestamp)
+    os.makedirs(work_dir, exist_ok=True)
+    # The directory is named after now : keep the sources, their line and their dates (upload to SpectroSolHub)
+    save_sources(work_dir, 'animation', request.paths)
+
+    gifs_created = []
+    try:
+        for index, (matching_paths, gif_name) in enumerate(todo):
+            output_gif_path = os.path.join(work_dir, gif_name)
+            create_gif(
+                matching_paths,
+                request.watermark,
+                request.observer,
+                output_gif_path,
+                request.frame_duration,
+                request.display_datetime,
+                request.resize_gif,
+                request.bidirectional,
+                request.add_average_frame,
+                progress=lambda fraction, index=index: job.report('creating_gif', (index + fraction) / len(todo), index + 1, len(todo)),
+            )
+            gifs_created.append(str(output_gif_path))
+    except Exception as e:
+        if not request.job_id:
+            # Unchanged for the frontends that do not follow the animation : HTTP 500
+            raise
+        logging.exception('animation failed')
+        return job.fail('animation_failed', e, 500)
+
+    path = os.path.normpath(work_dir)
+    job.complete(path)
+    return {"message": "GIFs created successfully", "gifs": gifs_created, "status": "completed",
+            "job_id": request.job_id, "path": path}
 
 class FileTagRequest(BaseModel):
     filename: str
@@ -1104,6 +1317,8 @@ async def websocket_endpoint(websocket: WebSocket):
         # Last scan processing state sent to this client, 0 so that a client which
         # (re)connects gets the current state of the scans being processed
         progress_seq = 0
+        upload_seq = 0
+        job_seq = 0
         # Infinite loop to handle continuous data streaming
         while True:
             # Check for notifications in the queue
@@ -1113,8 +1328,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # Send the scan processing states that changed since the last loop
             for state in app.scanProgress.changes_since(progress_seq):
-                await websocket.send_text(ScanProgress.to_message(state))
+                await websocket.send_text(app.scanProgress.to_message(state))
                 progress_seq = state['seq']
+
+            # Same for the uploads to SpectroSolHub
+            for state in spectrosolhub.progress.changes_since(upload_seq):
+                await websocket.send_text(spectrosolhub.progress.to_message(state))
+                upload_seq = state['seq']
+
+            # Same for the stackings and the animations
+            for state in app.jobProgress.changes_since(job_seq):
+                await websocket.send_text(app.jobProgress.to_message(state))
+                job_seq = state['seq']
 
             # Handle camera frame streaming if camera is connected
             if app.cameraController and app.cameraController.getStatus() == 'connected':

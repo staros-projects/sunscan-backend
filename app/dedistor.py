@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageChops
 import cv2
 
 from process import Colorise_Image, sharpenImage, get_text_position, create_protus_image, create_negative_surface_image
-from storage import get_scan_tag
+from storage import get_scan_tag, save_sources
 from config import LineDict
 
 from Inti_functions import detect_edge, fit_ellipse
@@ -195,7 +195,11 @@ def correct_image_png(input_name, dx_map, dy_map):
     return corrected_image
 
 
-def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
+def stack(paths, status, observer, patch_size, step_size, intensity_threshold, progress=None):
+    """
+    progress (function): Optional, progress(step key, fraction of the step, scan number, number of scans).
+    Returns the directory of the new stack, None when the scans do not all have the images to stack.
+    """
     if not status['clahe'] and not status['helium']:
         return 
 
@@ -216,6 +220,8 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
     print('conf:',patch_size, step_size, intensity_threshold)
     for p in paths:
         print('Stack #'+str(i))
+        if progress:
+            progress('aligning', (i - 1) / len(paths), i, len(paths))
         dirname = os.path.dirname(p)
         # Check for tag_ file and set tag accordingly
         if not tag:
@@ -266,18 +272,25 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold):
     work_dir = os.path.join(stacking_dir, timestamp)
     if not os.path.exists(work_dir):
         os.mkdir(work_dir)
+    # The directory is named after now : keep the scans, their line and their dates (upload to SpectroSolHub)
+    save_sources(work_dir, 'stack', paths)
 
     watermark_txt = str(i-1)+' stacked images - '+formatted_avg_datetime+' UT'
     watermark_txt_t = watermark_txt
     if tag:
         watermark_txt_t += ' - '+ tag
 
+    if progress:
+        progress('writing_images', 0.0, len(paths), len(paths))
     write_images(work_dir, sum_image, 'clahe', i-1, watermark_txt_t, observer, tag)
  
+    if progress:
+        progress('writing_images', 0.8, len(paths), len(paths))
     if status['helium_cont']: 
         write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer, tag)
     elif status['cont']: 
         write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer, tag)
+    return work_dir
 
         
 def apply_watermark_if_enable(frame, text, observer):

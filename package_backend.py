@@ -22,6 +22,7 @@ if __name__ == "__main__":
     include_dirs = [
         './app',
         './app/fonts',
+        './app/firmware',
         './webapp/dist',
         './webapp/dist/assets'
     ]

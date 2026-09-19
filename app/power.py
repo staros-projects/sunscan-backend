@@ -88,7 +88,7 @@ class PowerHelper:
             response = self.send_command_to_pisugar("get battery")
             battery_level = response.split()[-1]
             battery_float = float(battery_level)
-        except ValueError:
+        except (ValueError, PiSugarError):
             self.logger.info('Invalid battery output')
         return battery_float
 
