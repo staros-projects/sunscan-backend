@@ -228,7 +228,7 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
         os.mkdir(path)
         
     scans = []
-    regex = r"stacked_(helium|helium_cont|negative|clahe|cont|protus)_(\d)_(raw|sharpen).png"
+    regex = r"stacked_(helium|helium_cont|negative|clahe|cont|protus)_(\d+)_(raw|sharpen).png"
     for root, dirs, files in os.walk(path, topdown=False):
         stacking_dirname = None
         images = []
@@ -246,6 +246,8 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
                     if "stacked_clahe" in file_path:
                         images.append(file_path)
                     elif "stacked_cont" in file_path:
+                        images.append(file_path)
+                    elif "stacked_hepsilon" in file_path:
                         images.append(file_path)
                     # elif "stacked_protus" in file_path:
                     #     images.append(file_path)
@@ -276,6 +278,8 @@ def get_animated_scans(path='storage/animations/', withDetails=False):
                     stacking_dirname = os.path.dirname(file_path)
 
                     if "helium" in file_path:
+                        images.append(file_path)
+                    elif "hepsilon" in file_path:
                         images.append(file_path)
                     elif "negative" in file_path:
                         images.append(file_path)

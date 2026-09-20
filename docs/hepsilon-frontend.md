@@ -61,7 +61,8 @@ Sans cette clé, le libellé générique prévu dans cette doc s'affiche. Quand 
 ## 4. Ce qui n'existe pas pour Hε
 
 - **Planisphère.** Pas de `sunscan_hepsilon*_proj.jpg`. Rien à changer : `PictureScreen.js` ne trouve aucune entrée correspondante dans `scan.planispheres` et n'affiche donc rien.
-- **Empilement et animation.** Le backend choisit lui-même les types d'images qu'il empile ou anime, et Hε n'en fait pas partie. Rien à changer.
+- **Animation : Hε en fait partie depuis le backend 2.1.3.** Quand tous les scans animés ont leurs images Hε, l'animation produit en plus `animated_hepsilon.gif` et `animated_hepsilon_protus.gif` (depuis des stacks : `animated_hepsilon.gif`, `animated_hepsilon_sharpen.gif` et `animated_hepsilon_protus.gif`). Ils arrivent dans `images` de `GET /sunscan/animated`, que `AnimatedPictureScreen.js` parcourt déjà de façon générique : rien à changer. La date incrustée sur les images porte la raie Hε, pas le tag Ca II H.
+- **Empilement : Hε en fait partie depuis le backend 2.1.3.** Quand tous les scans empilés ont leurs images Hε, le stack produit en plus `stacked_hepsilon_N_raw.jpg`, `stacked_hepsilon_N_sharpen.jpg`, `stacked_hepsilon_color_N_raw.jpg`, `stacked_hepsilon_color_N_sharpen.jpg` et `stacked_hepsilon_protus_N_raw.jpg` (plus les PNG 16 bits et deux aperçus `*_preview.jpg`). Ils arrivent dans `images` de `GET /sunscan/stacked`, que `StackedPictureScreen.js` parcourt déjà de façon générique (tous les `.jpg` sauf les aperçus) : rien à changer. Un seul scan sans images Hε dans la sélection (traité avant 2.1.0, ou écarté par la vérification du spectre) et le stack n'en a pas : proposer de retraiter. Le filigrane de ces images porte la raie Hε, pas le tag Ca II H du stack. Pour l'envoi SpectroSolHub, leurs `kind` sont `hepsilon_sharpen`, `hepsilon_color_sharpen`, `hepsilon_protus_raw`..., voir `envoi-spectrosolhub.md`.
 - **Négatif.** Pas d'image négative Hε.
 - **Anciennes images.** Si un scan traité en `caIIH` est ensuite retagué puis retraité, les fichiers Hε du premier traitement restent dans le dossier et `existe` reste à `true`. Même comportement que pour `doppler` ou `negative` aujourd'hui.
 
@@ -74,5 +75,6 @@ Sur le Pi de développement :
 | `2025_10_04/sunscan_2025_10_04-10_54_44` | `caIIH` | les trois images Hε, protubérance visible au limbe droit |
 | `2025_07_12/sunscan_2025_07_12-08_15_52` | `caIIH` | aucune image Hε : c'est en réalité un scan Ca II K |
 | n'importe quel scan `halpha` | `halpha` | aucune image Hε, traitement inchangé |
+| un stack de scans `caIIH` qui ont tous leurs images Hε | | les fichiers `stacked_hepsilon_*` dans le dossier du stack, en plus des autres |
 
 Les images n'existent qu'après un traitement fait avec le nouveau backend : relance le traitement du scan depuis l'app.

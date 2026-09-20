@@ -64,7 +64,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '2.1.2'
+BACKEND_API_VERSION = '2.1.3'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -1092,7 +1092,8 @@ def getJobStatus(job_id: str):
 
 @app.post("/sunscan/process/stack/")
 def process_stack(request: PostProcessRequest):
-    required_files = {"clahe": False, "protus": False, "cont": False, "color":False, "helium":False, "helium_cont":False}
+    required_files = {"clahe": False, "protus": False, "cont": False, "color":False, "helium":False, "helium_cont":False,
+                      "hepsilon":False, "hepsilon_protus":False}
     for required_file, status in required_files.items():
         matching_paths = []
         for path_str in request.paths:
@@ -1140,6 +1141,9 @@ def process_animate(request: PostProcessRequest):
         "sunscan_helium_cont.png": "animated_helium_cont.gif",
         "sunscan_protus.png": "animated_protus.gif",
         "sunscan_cont.png": "animated_cont.gif",
+        # H epsilon of the Ca II H scans, when every scan has it
+        "sunscan_hepsilon.png": "animated_hepsilon.gif",
+        "sunscan_hepsilon_protus.png": "animated_hepsilon_protus.gif",
     }
 
     gif_names_stacking = {
@@ -1155,6 +1159,9 @@ def process_animate(request: PostProcessRequest):
         "stacked_protus_*_sharpen.png": "stacked_protus_sharpen.gif",
         "stacked_cont_*_raw.png": "stacked_cont.gif",
         "stacked_cont_*_sharpen.png": "stacked_cont_sharpen.gif",
+        "stacked_hepsilon_*_raw.png": "stacked_hepsilon.gif",
+        "stacked_hepsilon_*_sharpen.png": "stacked_hepsilon_sharpen.gif",
+        "stacked_hepsilon_protus_*_raw.png": "stacked_hepsilon_protus.gif",
         # "stacked_color_*_raw.jpg": "stacked_cont.gif",
         # "stacked_color_*_sharpen.jpg": "stacked_cont_sharpen.gif",
     }

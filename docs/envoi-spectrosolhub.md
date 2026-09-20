@@ -311,7 +311,7 @@ Mêmes routes, même canal, mêmes erreurs. À la place de `scan.ser`, mets dans
 | | Stack | Animation |
 |---|---|---|
 | Fichiers | JPEG | GIF |
-| `kind` | `clahe_sharpen`, `clahe_raw`, `cont_sharpen`, `negative_raw`, `color_sharpen`, `protus_raw`... | `clahe`, `clahe_sharpen`, `clahe_raw`, `cont`, `negative`, `protus`... |
+| `kind` | `clahe_sharpen`, `clahe_raw`, `cont_sharpen`, `negative_raw`, `color_sharpen`, `protus_raw`..., et pour un stack Ca II H fait avec le backend 2.1.3 ou plus : `hepsilon_sharpen`, `hepsilon_raw`, `hepsilon_color_sharpen`, `hepsilon_color_raw`, `hepsilon_protus_raw` (raie Hε) | `clahe`, `clahe_sharpen`, `clahe_raw`, `cont`, `negative`, `protus`..., et pour une animation Ca II H faite avec le backend 2.1.3 ou plus : `hepsilon`, `hepsilon_protus`, plus `hepsilon_sharpen` depuis des stacks |
 | `default` | une image par type, la version `sharpen` quand elle existe | pareil |
 
 Ne code pas la liste en dur : elle varie d'un dossier à l'autre (selon l'âge du stack et ce que contenaient les scans). Affiche ce que renvoie `images`. Les aperçus (`*_preview`) et les fichiers étrangers trouvés dans certains dossiers ne sont jamais proposés.

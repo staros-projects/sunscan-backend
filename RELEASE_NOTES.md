@@ -2,6 +2,23 @@
 
 The version is `BACKEND_API_VERSION` in `app/main.py`. The app reads it from `GET /sunscan/stats` (`backend_api_version`).
 
+## 2.1.3 (2026-09-20)
+
+### Added
+
+- **H-epsilon images of the stacks and animations of Ca II H scans.** A Ca II H scan produces H-epsilon images since 2.1.0, but stacking or animating Ca II H scans left them out (reported by a user). When every scan of the selection has them, the stack now also produces:
+  - `stacked_hepsilon_N_raw` and `stacked_hepsilon_N_sharpen` (surface, png and jpg), and the colour images `stacked_hepsilon_color_N_raw.jpg` and `stacked_hepsilon_color_N_sharpen.jpg`;
+  - `stacked_hepsilon_protus_N_raw` (prominences, png and jpg), not sharpened, as on a single scan;
+  - the previews `stacked_hepsilon_preview.jpg` and `stacked_hepsilon_protus_preview.jpg`.
+  - The H-epsilon images of the scans are aligned with the distortion maps computed on the Ca II H surface, as the continuum is. Their watermark carries the H-epsilon line (`Hε line - 3970.08 Å`), not the Ca II H tag of the stack.
+  - One scan without H-epsilon images in the selection (processed before 2.1.0, a Ca II K scan tagged Ca II H, or the line too close to the edge of the spectrum) and the stack has none: process that scan again first. Every other image of a stack is unchanged, byte for byte.
+  - The new images are listed in `images` of `GET /sunscan/stacked`, and can be sent to SpectroSolHub (`hepsilon_sharpen`, `hepsilon_raw`, `hepsilon_color_sharpen`, `hepsilon_color_raw`, `hepsilon_protus_raw`, line H-epsilon).
+  - Animations get them too: `animated_hepsilon.gif` and `animated_hepsilon_protus.gif` from scans, and from stacks `animated_hepsilon.gif`, `animated_hepsilon_sharpen.gif` and `animated_hepsilon_protus.gif`, when every source has the images. The date written on the frames comes with the H-epsilon line. They are listed in `images` of `GET /sunscan/animated` and can be sent to SpectroSolHub (`hepsilon`, `hepsilon_sharpen`, `hepsilon_protus`).
+
+### Fixed
+
+- `stacked_img_count` of `GET /sunscan/stacked` was wrong for a stack of 10 scans or more: only one digit of the number was read from the file names.
+
 ## 2.1.2 (2026-09-19)
 
 ### Fixed

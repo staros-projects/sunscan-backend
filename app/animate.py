@@ -9,6 +9,7 @@ from typing import List, Optional
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 from datetime import datetime
 from storage import get_scan_tag
+from config import LineDict
 
 class PostProcessRequest(BaseModel):
     paths: List[str]
@@ -111,7 +112,8 @@ def create_gif(image_paths: List[Path], watermark: bool, observer: str,output_pa
         else:
             datetime_str = extract_datetime_from_path(str(image_path), "sunscan_%Y_%m_%d-%H_%M_%S")
         if display_datetime:
-            tag = get_scan_tag(os.path.dirname(image_path))
+            # the H epsilon images of a Ca II H scan or stack carry their own line, not its tag
+            tag = LineDict['hepsilon'] if 'hepsilon' in os.path.basename(str(output_path)) else get_scan_tag(os.path.dirname(image_path))
             txt = datetime_str if not tag else datetime_str+" - "+tag
             frame = add_datetime_to_frame(frame, txt)
         if watermark:

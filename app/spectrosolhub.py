@@ -123,7 +123,7 @@ IMAGE_KIND_PREFIX = 'SUNSCAN_'
 # animated_<image>[_<raw|sharpen>].gif (main.py names the GIF of an animation of stacks 'stacked_...' but
 # create_gif renames it, 'stacked' is only accepted in case that changes).
 # The previews and anything else found in these directories are not sent.
-_DERIVED_IMAGE = r'(helium_cont|helium|clahe|cont|negative|color|protus)'
+_DERIVED_IMAGE = r'(helium_cont|helium|hepsilon_protus|hepsilon_color|hepsilon|clahe|cont|negative|color|protus)'
 _STACK_FILE = re.compile(r'stacked_' + _DERIVED_IMAGE + r'(?:_(\d+))?_(raw|sharpen)\.jpg')
 _ANIMATION_FILE = re.compile(r'(?:animated|stacked)_' + _DERIVED_IMAGE + r'(?:_(raw|sharpen))?\.gif')
 # image -> (image kind on the hub, title on the hub, line), as in HUB_IMAGES. The kind sent is
@@ -136,6 +136,9 @@ DERIVED_IMAGES = {
     'cont':        ('CONTINUUM', 'Continuum', None),
     'helium':      ('HELIUM', 'Helium', 'heI'),
     'helium_cont': ('HELIUM_CONTINUUM', 'Helium + continuum', 'heI'),
+    'hepsilon':        ('HEPSILON', 'H-epsilon disk', 'hepsilon'),
+    'hepsilon_color':  ('HEPSILON_COLOR', 'H-epsilon disk, artificial color', 'hepsilon'),
+    'hepsilon_protus': ('HEPSILON_PROTUS', 'H-epsilon prominences', 'hepsilon'),
 }
 # One file per image is sent by default : the sharpened one when it exists
 _VARIANTS = ('sharpen', '', 'raw')

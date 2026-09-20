@@ -210,10 +210,18 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
     sum_image = imageio.v2.imread(deformed_root )
     sum_image = sum_image.astype(np.uint32) 
 
+    # Other images of the scans summed with the surface, aligned with its distortion maps :
+    # type of the stacked image -> file of the scans. A Ca II H scan also has the H epsilon images : they are
+    # stacked when every scan has them (not a Ca II K scan tagged Ca II H, nor a scan processed before 2.1.0)
+    extra = {}
     if status['cont'] or status['helium_cont']:
-        cont_deformed_root = os.path.join(os.path.dirname(paths[0]) ,cont_basefilename)
-        cont_sum_image = imageio.v2.imread(cont_deformed_root )
-        cont_sum_image = cont_sum_image.astype(np.uint32) 
+        extra['cont'] = cont_basefilename
+    if not status['helium']:
+        for name in ('hepsilon', 'hepsilon_protus'):
+            if status.get(name):
+                extra[name] = 'sunscan_' + name + '.png'
+    extra_sum_images = {name: imageio.v2.imread(os.path.join(os.path.dirname(paths[0]), basefilename)).astype(np.uint32)
+                        for name, basefilename in extra.items()}
     i = 1
     tag = ''
     acquisition_dates = []
@@ -244,15 +252,12 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
         # Correction des distorsions dans la s�quence principale (format PNG en entr�e)
         corrected_image = correct_image_png(deformed_name, dx_map, dy_map)
 
-        if status['cont'] or status['helium_cont']:
-            cont_deformed_name = os.path.join(os.path.dirname(p) ,cont_basefilename)
-            corrected_cont_image = correct_image_png(cont_deformed_name, dx_map, dy_map)
-        
         # Sommation (stacking)
         if i>1:
             sum_image = sum_image + corrected_image.astype(np.uint32)
-            if status['cont'] or status['helium_cont']:
-                cont_sum_image = cont_sum_image + corrected_cont_image.astype(np.uint32)
+            for name, basefilename in extra.items():
+                corrected_extra_image = correct_image_png(os.path.join(dirname, basefilename), dx_map, dy_map)
+                extra_sum_images[name] = extra_sum_images[name] + corrected_extra_image.astype(np.uint32)
 
         print('Scan #' + p)
         i+=1
@@ -286,10 +291,18 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
  
     if progress:
         progress('writing_images', 0.8, len(paths), len(paths))
-    if status['helium_cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt_t, observer, tag)
-    elif status['cont']: 
-        write_images(work_dir, cont_sum_image, 'cont', i-1, watermark_txt, observer, tag)
+    if 'cont' in extra_sum_images:
+        # the helium continuum carries the line, the continuum of the other lines does not
+        write_images(work_dir, extra_sum_images['cont'], 'cont', i-1, watermark_txt_t if status['helium_cont'] else watermark_txt, observer, tag)
+    # The H epsilon images carry their own line, not the tag of the scans (Ca II H)
+    hepsilon_txt = watermark_txt + ' - ' + LineDict['hepsilon']
+    if 'hepsilon' in extra_sum_images:
+        if progress:
+            progress('writing_images', 0.9, len(paths), len(paths))
+        write_images(work_dir, extra_sum_images['hepsilon'], 'hepsilon', i-1, hepsilon_txt, observer, tag)
+    if 'hepsilon_protus' in extra_sum_images:
+        # the prominences are not sharpened, as on a single scan
+        write_images(work_dir, extra_sum_images['hepsilon_protus'], 'hepsilon_protus', i-1, hepsilon_txt, observer, tag, sharpen=False)
     return work_dir
 
         
@@ -314,7 +327,8 @@ def apply_watermark_if_enable(frame, text, observer):
     return np.array(image)
 
 
-def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag):
+def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag, sharpen=True):
+    """sharpen : also write the sharpened version, the one the preview is made of. False for the prominences."""
     sum_image = sum_image / scan_count
     sum_image = sum_image.astype(np.uint16)
 
@@ -325,9 +339,11 @@ def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag):
 
     imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.png'), sum_image, format="png")
     cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_raw.jpg'), apply_watermark_if_enable(sum_image//256,text,observer))
-    sum_image2 = sharpenImage(sum_image, 1 if scan_count<8 else 2)
-    imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_sharpen.png'), sum_image2, format="png")
-    cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image2//256,text,observer))
+    sum_image2 = sum_image
+    if sharpen:
+        sum_image2 = sharpenImage(sum_image, 1 if scan_count<8 else 2)
+        imageio.v2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_sharpen.png'), sum_image2, format="png")
+        cv2.imwrite(os.path.join(work_dir,'stacked_'+im_type+'_'+str(scan_count)+'_sharpen.jpg'), apply_watermark_if_enable(sum_image2//256,text,observer))
     
 
 
@@ -343,6 +359,11 @@ def write_images(work_dir, sum_image, im_type, scan_count, text, observer, tag):
     for t in tag_enabled_for_negative:
         l = LineDict[t]
         label_enabled_for_negative.append(l)
+
+    if im_type == 'hepsilon':
+        # coloured like the H epsilon image of a scan, raw and sharpened as the colour image of the surface
+        Colorise_Image('hepsilon', sum_image, work_dir, text, observer, False, 'stacked_hepsilon_color_'+str(scan_count)+'_raw')
+        Colorise_Image('hepsilon', sum_image2, work_dir, text, observer, False, 'stacked_hepsilon_color_'+str(scan_count)+'_sharpen')
 
     if im_type == 'clahe':
         for (k,v) in LineDict.items():
