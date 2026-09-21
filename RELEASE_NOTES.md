@@ -2,6 +2,24 @@
 
 The version is `BACKEND_API_VERSION` in `app/main.py`. The app reads it from `GET /sunscan/stats` (`backend_api_version`).
 
+## 2.1.4 (2026-09-21)
+
+### Changed
+
+- **The Linux desktop of the Raspberry Pi is off by default.** Nothing on the SunScan needs it: the device is driven from the phone, and the display manager, the compositor, the panel and the file manager only took memory (about 70 MB measured on a Pi 4) and 1 to 3 % of a core. Each time the backend starts it sets the Pi to boot without the desktop, so an installed SunScan loses it at the second boot after the update.
+  - A desktop which is already running is never stopped by the backend itself: the backend restarts far more often than the Pi does, and stopping the session would close the applications of whoever is working on the Pi. Only the next boots change.
+  - Nothing else is modified: the automatic login of the display manager is left as it is, and the backend is a system service, unaffected by the desktop going up or down.
+  - With the desktop off, the HDMI screen shows the text console and VNC does not answer, since it needs the desktop.
+
+### Added
+
+- **Routes to turn the Linux desktop on and off**, so it can be brought back to work on the Pi itself, from the app or with `curl`. See `docs/bureau-linux.md`.
+  - `GET /sunscan/desktop` gives `supported` (false on a Raspberry Pi OS Lite image), `running`, `at_boot` and the systemd `state` of the display manager.
+  - `POST /sunscan/desktop` takes `running` and / or `at_boot`, both optional, the one left out is not changed. `running` starts or stops the desktop for the current boot; `at_boot` chooses whether it starts with the Pi, and keeps that choice out of the application folder (`~/.config/sunscan/desktop_at_boot`), so an update does not overwrite it. Without that flag, a boot on the desktop set by hand (`raspi-config`, `systemctl set-default`) is reverted when the backend starts.
+  - The answer is the state read after the switch. Starting or stopping is refused during the recording of a scan (409 `recording`), since starting the desktop loads the CPU and the SD card; asking for `at_boot` alone is still accepted. 501 `unsupported` without a desktop installed.
+  - Stopping closes every application opened on the desktop, unsaved work included: the app asks for confirmation first.
+- **`GET /camera/set-monobin-mode/{mode}`** selects a monochrome binning mode directly (0 RGB, 1 R, 2 G, 3 B), instead of cycling through the four with `/camera/toggle-monobin-mode/`. 422 for any other value. The cycling route is unchanged.
+
 ## 2.1.3 (2026-09-20)
 
 ### Added

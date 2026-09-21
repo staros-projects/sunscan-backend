@@ -146,6 +146,15 @@ class CameraController:
         self._monobin_mode = (self._monobin_mode + 1) % 4
         self._camera.updateCameraControls(self.getCameraControls())
 
+    def setMonoBinMode(self, mode):
+        """
+        Select a monochrome binning mode directly.
+
+        :param mode: 0 : RGB, 1 : R, 2 : G, 3 : B
+        """
+        self._monobin_mode = mode
+        self._camera.updateCameraControls(self.getCameraControls())
+
     def isInBinMode(self):
         """
         Check if binning mode is active.

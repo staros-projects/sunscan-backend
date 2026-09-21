@@ -58,13 +58,14 @@ import gallery
 from system_tuning import apply_system_tuning
 import network
 import pisugar_repair
+import desktop
 import spectrosolhub
 from animate import *
 from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '2.1.3'
+BACKEND_API_VERSION = '2.1.4'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -97,6 +98,10 @@ class WifiConnect(BaseModel):
 
 class WifiForget(BaseModel):
     ssid: str
+
+class DesktopSwitch(BaseModel):
+    running: Optional[bool] = None
+    at_boot: Optional[bool] = None
 
 class HubLogin(BaseModel):
     username: str
@@ -134,6 +139,7 @@ def sys_debug():
 sys_debug()
 # Before any thread is started, so they all inherit the raised priority
 apply_system_tuning()
+desktop.apply_default()
 network.start_network_monitor(BACKEND_API_VERSION)
 app = FastAPI()
 
@@ -648,6 +654,21 @@ async def toggleMonoBinMode(request: Request):
     app.cameraController.toggleMonoBinMode()
     return getCameraControls()
 
+@app.get("/camera/set-monobin-mode/{mode}", response_class=JSONResponse)
+async def setMonoBinMode(mode: int):
+    """
+    Select a monochrome binning mode directly (0 : RGB, 1 : R, 2 : G, 3 : B),
+    instead of cycling with /camera/toggle-monobin-mode/.
+
+    Returns:
+        JSONResponse: Updated camera settings, 422 if the mode is not 0, 1, 2 or 3.
+    """
+    if mode not in (0, 1, 2, 3):
+        raise HTTPException(status_code=422, detail="mode must be 0 (RGB), 1 (R), 2 (G) or 3 (B)")
+    if app.cameraController:
+        app.cameraController.setMonoBinMode(mode)
+        return getCameraControls()
+
 @app.get("/camera/toggle-bin/", response_class=JSONResponse)
 async def toggleFlat(request: Request):
     """
@@ -863,6 +884,30 @@ async def shutdownSUNSCAN():
 async def rebootSUNSCAN():
     os.system("sudo shutdown -r now")
     return JSONResponse(content={"message": "Reboot ok"}, status_code=200)
+
+
+# -- Linux desktop on demand, see docs/bureau-linux.md --
+
+@app.get("/sunscan/desktop", response_class=JSONResponse)
+def desktopStatus():
+    """State of the Linux desktop : running now, started at boot."""
+    return JSONResponse(content=desktop.status())
+
+@app.post("/sunscan/desktop", response_class=JSONResponse)
+def desktopSwitch(req: DesktopSwitch):
+    """
+    The desktop is off by default (the backend sets the Pi to boot without it each time it starts).
+    running starts or stops it for the current boot, at_boot keeps it at the next boots.
+    Stopping closes every application of the graphical session. Starting or stopping is refused during a scan.
+    """
+    if req.running is None and req.at_boot is None:
+        raise HTTPException(status_code=422, detail="running or at_boot is required")
+    if req.running is not None and app.cameraController and app.cameraController.isRecording():
+        return JSONResponse(content={"status": "failed", "error": "recording", "detail": "a scan is being recorded"}, status_code=409)
+    try:
+        return JSONResponse(content=desktop.switch(req.running, req.at_boot))
+    except desktop.DesktopError as e:
+        return JSONResponse(content={"status": "failed", "error": e.code, "detail": str(e)}, status_code=e.http_status)
 
 
 # -- WiFi provisioning, see docs/provisioning-wifi.md --
