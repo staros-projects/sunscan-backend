@@ -121,6 +121,9 @@ def section_root(section: str) -> str:
     root = SECTIONS.get(section)
     if root is None:
         raise HTTPException(status_code=404, detail=f"Unknown section '{section}'")
+    # Deleted by hand, or never used on a fresh image : created with storage/ itself, so that listing
+    # the section gives an empty folder rather than a 404 or a 500
+    os.makedirs(root, exist_ok=True)
     return root
 
 
@@ -249,7 +252,7 @@ def _entry(section: str, e: os.DirEntry) -> dict:
 
 def list_all_scans() -> dict:
     """Every scan folder of every date, so the gallery opens a scan in one click."""
-    root = SECTIONS['scans']
+    root = section_root('scans')
     entries = []
     for date in os.scandir(root):
         if date.is_dir() and _shown(date):

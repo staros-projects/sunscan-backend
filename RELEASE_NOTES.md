@@ -2,6 +2,17 @@
 
 The version is `BACKEND_API_VERSION` in `app/main.py`. The app reads it from `GET /sunscan/stats` (`backend_api_version`).
 
+## 2.1.6 (2026-09-29)
+
+### Fixed
+
+- **The folders of `storage/` are created again when they are missing.** Any of them (`scans`, `snapshots`, `stacking`, `animations`, `tmp`, and `storage/` itself) can be deleted by hand, over SFTP or from the Linux desktop, while the backend runs; and a fresh image has none of them, each one appeared with its first use. Part of the code assumed they were there:
+  - a scan started without `storage/scans` stopped the capture thread: no more frames and no more scans until the backend restarted;
+  - a snapshot without `storage/snapshots` closed the live socket, and the snapshot still pending, every reconnection of the app closed it again;
+  - a stacking or a listing without `storage/` answered 500, and so did `POST /sunscan/update` without `storage/tmp` (on a fresh image, until the web gallery had cached a thumbnail);
+  - `GET /snapshots`, `GET /sunscan/snapshots/delete/all/` and the gallery (`/gallery/list/...`) answered 404 or 500 instead of an empty folder.
+  - Every folder is now created with its parents where it is needed: when a scan, a snapshot, a stack or an animation is written, when a section is listed, and `storage/` itself when the backend starts. Nothing changes for the folders which exist, and a folder deleted during a recording still loses that scan.
+
 ## 2.1.5 (2026-09-28)
 
 ### Fixed

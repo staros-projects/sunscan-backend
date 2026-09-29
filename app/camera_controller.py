@@ -369,20 +369,14 @@ class CameraController:
         # Create filename with prefix and timestamp
         filename = f"{self._filename_prefix}_{timestr}"
         
-        # Create full path for the date directory
-        full_path = os.path.join(self._path, date)
-        if not os.path.exists(full_path):
-            os.mkdir(full_path)
-        
-        # Add filename to the full path
-        full_path = os.path.join(full_path, filename)
+        # Directory of the scan, storage/scans/<date>/<filename>, created with its parents : storage/scans or
+        # the date folder can have been deleted by hand, and this runs on the capture thread, where an error
+        # would stop the frames until the backend restarts
+        full_path = os.path.join(self._path, date, filename)
+        os.makedirs(full_path, exist_ok=True)
         
         # Set the final SER filename
         self._final_ser_filename = os.path.join(full_path, f"scan.ser")
-        
-        # Create the directory if it doesn't exist
-        if not os.path.exists(full_path):
-            os.mkdir(full_path)
         
         # Create a new Serfile object
         serfile_object = Serfile(self._final_ser_filename, NEW=True)

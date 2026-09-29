@@ -65,7 +65,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '2.1.5'
+BACKEND_API_VERSION = '2.1.6'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -166,7 +166,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static file directories
+# Mount static file directories. storage/ and its folders (scans, snapshots, stacking, animations, tmp) are
+# never assumed to exist : any of them can be deleted by hand (SFTP, the desktop) while the backend runs, and
+# a fresh image has none of them. Each one is created where it is needed ; without storage/ the mount itself
+# would refuse to start the backend.
+os.makedirs("storage", exist_ok=True)
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 # Initialize camera controller and normalization flag
@@ -240,6 +244,8 @@ async def update(file: UploadFile = File(...)):
     try:
         zip_path = "./storage/tmp/sunscan_backend.zip"
         print('update', file)
+        # storage/tmp does not exist on a fresh image until the gallery caches a thumbnail, and can be deleted by hand
+        os.makedirs(os.path.dirname(zip_path), exist_ok=True)
         with open(zip_path, "wb") as buffer:
             buffer.write(await file.read())
 
@@ -866,13 +872,15 @@ async def deleteAllSnapshots(background_tasks: BackgroundTasks):
         None: This endpoint doesn't return a response directly.
     """
     dirToClean = './storage/snapshots/'
+    if not os.path.isdir(dirToClean):
+        # Deleted by hand, or no snapshot taken yet : nothing to delete
+        print(f"The directory {dirToClean} does not exist.")
+        return
     for item in os.listdir(dirToClean):
         item_path = os.path.join(dirToClean, item)
         if os.path.isfile(item_path):
-            os.remove(item_path)  
-        print(f"The directory {dirToClean} ws cleared.")
-    else:
-        print(f"The directory {dirToClean} does not exist.")
+            os.remove(item_path)
+    print(f"The directory {dirToClean} was cleared.")
 
 
 @app.post("/sunscan/shutdown/", response_class=JSONResponse)
@@ -1416,7 +1424,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         
                         # Handle snapshot capture if requested
                         if app.takeSnapShot and app.snapshot_filename and app.snapshot_header:
-                            d = time.strftime("%Y_%m_%d")
+                            # storage/snapshots can be missing (deleted by hand, fresh image) : an error here would
+                            # close the socket, and the snapshot still pending, every reconnection would fail the same way
+                            os.makedirs(os.path.dirname(app.snapshot_filename), exist_ok=True)
                             cv2.imwrite(app.snapshot_filename+'.png',frame) 
 
                             app.snapshot_header['WIDTH']=frame.shape[1]
@@ -1539,8 +1549,8 @@ def get_snapshots():
     """
     List the snapshot images: [{name, thumbnail}].
     """
-    if not os.path.exists(SNAPSHOTS_DIR):
-        raise HTTPException(status_code=404, detail="Scan folder not found")
+    # Created when it is missing (deleted by hand, fresh image) : an empty list rather than a 404
+    os.makedirs(SNAPSHOTS_DIR, exist_ok=True)
     images = [f for f in os.listdir(SNAPSHOTS_DIR) if f.lower().endswith(('.fits', '.png'))]
     return [{"name": image, "thumbnail": f"/snapshots/{image}"} for image in images]
 
