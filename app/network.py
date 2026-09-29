@@ -8,6 +8,11 @@ Pi, sends the SSID and password, and the Pi joins that network. The home network
 profile gets a higher autoconnect priority than the hotspot, so NetworkManager picks it
 at boot when it is in range and falls back to the hotspot otherwise (in the field).
 
+When the app asks for the hotspot (start_hotspot), the SunScan stays on it until the next
+boot or the next connect() : the automatic return to the home network is suspended. After
+any switch to the hotspot the return is also held off for a few minutes, so the phone has
+time to join the hotspot before the box leaves it again.
+
 The Pi 4 has a single WiFi radio : joining the home network stops the hotspot, so the
 phone loses the link during the switch. connect() therefore answers right away and does
 the switch in a background thread after a short delay. When the home network can not be
@@ -53,6 +58,8 @@ CONNECT_TIMEOUT = 45
 # is connected to the hotspot
 RETURN_HOME_INTERVAL = 120
 MONITOR_PERIOD = 15
+# After a switch to the hotspot, leave the phone time to join it before returning home
+RETURN_HOME_GRACE = 300
 
 CMD_TIMEOUT = 20
 
@@ -82,6 +89,10 @@ _scan_cache = {'networks': [], 'scanned_at': None}
 _attempt = {'state': 'idle', 'ssid': '', 'error': '', 'detail': '', 'ip': '',
             'started_at': None, 'finished_at': None}
 _last_client = None  # last successful connection to a home network : {ssid, ip, at}
+# The app asked for the hotspot : stay on it until the next boot or the next connect().
+# Kept in memory only, on purpose : a reboot goes back to the home network (NetworkManager priorities).
+_hotspot_hold = False
+_return_home_not_before = 0.0  # time.monotonic() before which _try_return_home() does nothing
 
 
 # -- Helpers --
@@ -414,6 +425,7 @@ def status():
         'ssid': active['ssid'] if active else '',
         'ip': dev['ip'],
         'hotspot': {'ssid': hotspot['ssid'] if hotspot else '', 'ip': HOTSPOT_IP},
+        'hotspot_hold': _hotspot_hold,
         'saved_networks': sorted({p['ssid'] for p in _client_profiles(profiles) if p['ssid']}),
         'attempt': attempt,
         'last_client': last_client,
@@ -480,6 +492,12 @@ def _activate_client(uuid, timeout=CONNECT_TIMEOUT):
     return proc.returncode == 0, out.strip(), ' '.join(err)
 
 
+def _hold_return_home(grace=RETURN_HOME_GRACE):
+    """After a switch to the hotspot : no automatic return home before the phone had time to join."""
+    global _return_home_not_before
+    _return_home_not_before = max(_return_home_not_before, time.monotonic() + grace)
+
+
 def _restore(previous_uuid):
     """Bring back the connection active before the attempt, the hotspot if there was none."""
     target = previous_uuid
@@ -489,6 +507,7 @@ def _restore(previous_uuid):
     if target:
         ok, _, err = _activate(target, timeout=30)
         logging.info(f'network : previous connection restored : {"ok" if ok else err}')
+        _hold_return_home()
 
 
 def _connect_worker(ssid, password, hidden, kind):
@@ -543,6 +562,7 @@ def connect(ssid, password='', hidden=False):
     Validate the request and start the switch to the given network in the background.
     Raises ProvisioningError when the request can not be accepted.
     """
+    global _hotspot_hold
     if not is_supported():
         raise ProvisioningError('not_supported', 'NetworkManager is not available', 501)
     ssid = ssid or ''
@@ -570,6 +590,7 @@ def connect(ssid, password='', hidden=False):
         _attempt.update({'state': 'connecting', 'ssid': ssid, 'error': '', 'detail': '', 'ip': '',
                          'started_at': int(time.time()), 'finished_at': None})
         _save_state()
+    _hotspot_hold = False  # the app wants a network again
     Thread(target=_connect_worker, args=(ssid, password, hidden, kind), name='wifi-connect', daemon=True).start()
     return {'status': 'connecting', 'ssid': ssid, 'switch_in': SWITCH_DELAY, 'timeout': CONNECT_TIMEOUT}
 
@@ -582,6 +603,7 @@ def _switch_later(uuid):
             time.sleep(SWITCH_DELAY)
             ok, _, err = _activate(uuid, timeout=30)
             logging.info(f'network : switch to {uuid} : {"ok" if ok else err}')
+            _hold_return_home()
         finally:
             _attempt_lock.release()
 
@@ -591,15 +613,23 @@ def _switch_later(uuid):
 
 
 def start_hotspot():
-    """Switch to the hotspot now. The saved networks are kept and used again at the next boot."""
+    """
+    Switch to the hotspot now and stay on it : the automatic return to a saved network is
+    suspended until the next boot or the next connect(). The saved networks are kept, they are
+    used again at the next boot.
+    """
+    global _hotspot_hold
     if not is_supported():
         raise ProvisioningError('not_supported', 'NetworkManager is not available', 501)
     hotspot = _hotspot_profile()
     if not hotspot:
         raise ProvisioningError('no_hotspot', 'No hotspot profile found', 500)
     if _device_state(_wifi_device())['uuid'] == hotspot['uuid']:
+        _hotspot_hold = True
         return {'status': 'ok', 'switching': False}
     _switch_later(hotspot['uuid'])
+    _hotspot_hold = True
+    logging.info('network : hotspot asked by the app, automatic return home suspended until the next boot')
     return {'status': 'ok', 'switching': True, 'switch_in': SWITCH_DELAY}
 
 
@@ -621,6 +651,7 @@ def forget(ssid):
             try:
                 time.sleep(SWITCH_DELAY)
                 _activate(hotspot['uuid'], timeout=30)
+                _hold_return_home()
                 for p in targets:
                     _run(['nmcli', 'connection', 'delete', 'uuid', p['uuid']])
             finally:
@@ -664,7 +695,11 @@ def _try_return_home():
     """
     In hotspot mode with nobody connected, join a saved home network when it is in range again
     (after a reboot of the box, NetworkManager falls back to the hotspot and stays there).
+    Not when the app asked for the hotspot, and not right after a switch to the hotspot : the
+    phone needs time to join it, and it would find nobody.
     """
+    if _hotspot_hold or time.monotonic() < _return_home_not_before:
+        return
     device = _wifi_device()
     profiles = _profiles()
     hotspot = _hotspot_profile(profiles)

@@ -65,7 +65,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '2.1.4'
+BACKEND_API_VERSION = '2.1.5'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -946,7 +946,7 @@ def networkWifiForget(req: WifiForget):
 
 @app.post("/network/hotspot", response_class=JSONResponse)
 def networkHotspot():
-    """Switch to the hotspot now, the saved networks are kept (used again at the next boot)."""
+    """Switch to the hotspot now and stay on it until the next boot (or a new connect). The saved networks are kept."""
     try:
         return JSONResponse(content=network.start_hotspot())
     except network.ProvisioningError as e:

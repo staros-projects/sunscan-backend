@@ -2,6 +2,14 @@
 
 The version is `BACKEND_API_VERSION` in `app/main.py`. The app reads it from `GET /sunscan/stats` (`backend_api_version`).
 
+## 2.1.5 (2026-09-28)
+
+### Fixed
+
+- **The SunScan left its hotspot on its own after `POST /network/hotspot`.** The saved home networks are kept by design, and a background monitor joins one when the box is on its hotspot with nobody connected and the network is in range (a box booted in the field, brought back home). It ran too after the app had asked for the hotspot, at home with the WiFi in range: its next check could come seconds after the switch, before the phone had joined the hotspot, and the box went straight back to the WiFi. It also went back each time the phone dropped the hotspot for two minutes, which phones do with a network without internet.
+  - After `POST /network/hotspot` the SunScan now stays on the hotspot until the next boot or the next `POST /network/wifi/connect`. The flag is kept in memory only: a reboot goes back to the home network when it is in range, as the app announces. `GET /network/status` gives it as `hotspot_hold`.
+  - After any switch to the hotspot (hotspot asked, current network forgotten, failed connection), the automatic return waits five minutes, so the phone has time to join the hotspot and, after a failed connection, to read the result.
+
 ## 2.1.4 (2026-09-21)
 
 ### Changed
