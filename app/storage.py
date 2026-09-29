@@ -223,8 +223,9 @@ def get_scan_tag(path):
 
 def get_stacked_scans(path='storage/stacking/', withDetails=False):
 
-    # Created with storage/ itself when it is missing : deleted by hand, or never used on a fresh image
-    os.makedirs(path, exist_ok=True)
+    # Create the directory if it doesn't exist
+    if not os.path.exists(path):
+        os.mkdir(path)
         
     scans = []
     regex = r"stacked_(helium|helium_cont|negative|clahe|cont|protus)_(\d+)_(raw|sharpen).png"
@@ -260,8 +261,9 @@ def get_stacked_scans(path='storage/stacking/', withDetails=False):
 
 def get_animated_scans(path='storage/animations/', withDetails=False):
 
-    # Created with storage/ itself when it is missing : deleted by hand, or never used on a fresh image
-    os.makedirs(path, exist_ok=True)
+    # Create the directory if it doesn't exist
+    if not os.path.exists(path):
+        os.mkdir(path)
 
     scans = []
 
@@ -305,8 +307,9 @@ def get_scan_day(scan_dir, creation_date):
 
 def get_scans(path='storage/scans/', withDetails=False):
 
-    # Created with storage/ itself when it is missing : deleted by hand, or never used on a fresh image
-    os.makedirs(path, exist_ok=True)
+    # Create the directory if it doesn't exist
+    if not os.path.exists(path):
+        os.mkdir(path)
 
     scans = []
     for root, dirs, files in os.walk(path, topdown=False):

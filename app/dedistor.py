@@ -262,9 +262,10 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
         print('Scan #' + p)
         i+=1
 
-    # Created with storage/ itself when it is missing : deleted by hand, or never used on a fresh image
     stacking_dir = './storage/stacking'
-    os.makedirs(stacking_dir, exist_ok=True)
+    
+    if not os.path.exists(stacking_dir):
+        os.mkdir(stacking_dir)
 
     formatted_avg_datetime = None
     if acquisition_dates:
@@ -274,7 +275,8 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") 
     work_dir = os.path.join(stacking_dir, timestamp)
-    os.makedirs(work_dir, exist_ok=True)
+    if not os.path.exists(work_dir):
+        os.mkdir(work_dir)
     # The directory is named after now : keep the scans, their line and their dates (upload to SpectroSolHub)
     save_sources(work_dir, 'stack', paths, observer)
 
