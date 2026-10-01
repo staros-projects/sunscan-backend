@@ -2,6 +2,15 @@
 
 The version is `BACKEND_API_VERSION` in `app/main.py`. The app reads it from `GET /sunscan/stats` (`backend_api_version`).
 
+## 2.1.7 (2026-10-01)
+
+### Fixed
+
+- **Scans whose images differ in size could not be stacked.** A scan processed without the autocrop keeps the whole swept area, so the size of its images depends on the length of the scan (2102×956 and 2132×1787 for two scans of 1028 and 1891 frames of the same Sun); scans processed with different autocrop sizes differ too. The stacking summed the images pixel by pixel and failed with `stacking_failed` (HTTP 500, `operands could not be broadcast together`).
+  - When the images of the selected scans differ in size, each one is now cropped around its solar disk to a common square of about 1.4 disk diameters (1144 px for a disk of 816), then aligned and summed as before. The images of the scans also stacked with the surface (continuum, H epsilon) get the same crop.
+  - Scans of the same size, the usual case with the autocrop, are untouched: their stacks are identical to 2.1.6.
+  - When the disk can not be found on one of the scans, the stacking answers the new error `disk_not_found` (HTTP 409, with the number and the folder of the scan in `detail`) instead of a 500. See `docs/erreurs-stack.md` for the error keys the app can show.
+
 ## 2.1.6 (2026-09-29)
 
 ### Fixed

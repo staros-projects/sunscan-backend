@@ -80,16 +80,14 @@ def interpolate_displacement(x_values, y_values, displacement_values, image_shap
 # -------------------------------
 # FIND_DISTORSION 
 # -------------------------------
-def find_distorsion(reference_name, deformed_name, patch_size, step_size, intensity_threshold):
+def find_distorsion(ref_image, def_image, patch_size, step_size, intensity_threshold):
     """
     Parameters
     ----------
-    path : TYPE
-        Chemin des images
-    reference_name : TYPE
-        Nom de l'image ma�tre de r�f�rence'
-    deformed_name : TYPE
-        Nom  de l'image d�form�e � rectivier'
+    ref_image : TYPE
+        Image ma�tre de r�f�rence
+    def_image : TYPE
+        Image d�form�e � rectifier, de la taille de la r�f�rence
     patch_size : TYPE
         Taille du patch corr�lation
     step_size : TYPE
@@ -107,13 +105,6 @@ def find_distorsion(reference_name, deformed_name, patch_size, step_size, intens
         Carte de l'amplitude des d�calages '
     """
 
-    # Le traitement est fait par paire d'imagees, on charge la paire au format PNG
-    full_reference_path =  reference_name 
-    full_deformed_path =  deformed_name 
-    
-    ref_image = imageio.v2.imread(full_reference_path)
-    def_image = imageio.v2.imread(full_deformed_path)
-    
     # Conversion sur ne base 16 bits N&B (imp�ratif avec images SUNSCAN)
     ref_image = np.array(ref_image, np.uint16)
     def_image = np.array(def_image, np.uint16)
@@ -156,14 +147,12 @@ def find_distorsion(reference_name, deformed_name, patch_size, step_size, intens
 # CORRECT_IMAGE_PNG
 # Corrige une image d�form�e avec l'information des cartes dx, dy
 # -----------------------------------------------------------------
-def correct_image_png(input_name, dx_map, dy_map):
+def correct_image_png(def_image, dx_map, dy_map):
     """
     Parameters
     ----------
-    path : TYPE
-        Chemin de l'image'
-    input_name : TYPE
-        Nom de l'image (au format JPG)
+    def_image : TYPE
+        Image d�form�e, de la taille des cartes
     dx_map : TYPE
         Carte des d�formations en X
     dy_map : TYPE
@@ -176,14 +165,6 @@ def correct_image_png(input_name, dx_map, dy_map):
 
     """
     
-    # Charge l'image d�form�e (version FITS)
-    #input_path = path + input_name + '.fits'
-    #def_image = fits.getdata(input_path)
-    
-    # Charge l'image d�forl�e (version PNG)
-    input_path = input_name 
-    def_image = imageio.v2.imread(input_path)
-    
     # Convertie en 16 bits N&B
     def_image = np.array(def_image, np.uint16)
     
@@ -195,20 +176,84 @@ def correct_image_png(input_name, dx_map, dy_map):
     return corrected_image
 
 
+class StackError(Exception):
+    """Stacking refused for a reason the frontend can show : error key and detail."""
+    def __init__(self, error, detail):
+        super().__init__(detail)
+        self.error = error
+        self.detail = detail
+
+
+# Side of the stacked images when the scans differ in size, in disk diameters : as the autocrop of 1100 px
+# for a disk of about 800, it keeps the prominences
+DISK_FRAME_RATIO = 1.4
+
+def find_disk(image):
+    """(xc, yc, radius) of the solar disk of an image, None when it is not found."""
+    try:
+        X = detect_edge(image, zexcl=0.1, crop=0, disp_log=False)
+        fit, _ = fit_ellipse(image, X, disp_log=False)
+        xc, yc = (float(np.real(v)) for v in fit[0])
+        radius = float(np.real(max(fit[1], fit[2])))
+    except Exception as e:
+        print('disk not found', e)
+        return None
+    h, w = image.shape[:2]
+    if not (0 <= xc < w and 0 <= yc < h and 0 < radius < max(h, w)):
+        return None
+    return xc, yc, radius
+
+def crop_on_disk(image, xc, yc, side):
+    """Square of side pixels centred on the disk, black where the image does not cover it."""
+    square = np.zeros((side, side) + image.shape[2:], image.dtype)
+    x0 = int(round(xc)) - side // 2
+    y0 = int(round(yc)) - side // 2
+    sx0, sy0 = max(x0, 0), max(y0, 0)
+    sx1, sy1 = min(x0 + side, image.shape[1]), min(y0 + side, image.shape[0])
+    if sx1 > sx0 and sy1 > sy0:
+        square[sy0 - y0:sy1 - y0, sx0 - x0:sx1 - x0] = image[sy0:sy1, sx0:sx1]
+    return square
+
+
 def stack(paths, status, observer, patch_size, step_size, intensity_threshold, progress=None):
     """
     progress (function): Optional, progress(step key, fraction of the step, scan number, number of scans).
     Returns the directory of the new stack, None when the scans do not all have the images to stack.
+    Raises StackError when the scans can not be stacked together.
     """
     if not status['clahe'] and not status['helium']:
-        return 
+        return
 
     clahe_basefilename =  'sunscan_clahe.png' if not status['helium'] else 'sunscan_helium.png'
     cont_basefilename =  'sunscan_cont.png' if not status['helium'] else 'sunscan_helium_cont.png'
 
-    deformed_root = os.path.join(os.path.dirname(paths[0]) ,clahe_basefilename)
-    sum_image = imageio.v2.imread(deformed_root )
-    sum_image = sum_image.astype(np.uint32) 
+    def load(p, basefilename):
+        return imageio.v2.imread(os.path.join(os.path.dirname(p), basefilename))
+
+    surfaces = [load(p, clahe_basefilename) for p in paths]
+
+    # Scans processed without the autocrop (their size depends on the length of the scan), or with different
+    # autocrop sizes : each one is cropped around its disk to a common square, the alignment does the rest
+    disks = None
+    if len({s.shape for s in surfaces}) > 1:
+        disks = []
+        for n, (p, s) in enumerate(zip(paths, surfaces), 1):
+            disk = find_disk(s)
+            if disk is None:
+                raise StackError('disk_not_found', f'Scan #{n} ({os.path.dirname(p)}) : solar disk not found')
+            disks.append(disk)
+        side = 2 * int(round(max(d[2] for d in disks) * DISK_FRAME_RATIO))
+        print('stack: scans of different sizes', [s.shape for s in surfaces], 'cropped on their disk to', side)
+
+    def prepare(n, image):
+        """Image of the scan n (from 0) at the size of the stack."""
+        if disks is None:
+            return image
+        xc, yc, _ = disks[n]
+        return crop_on_disk(image, xc, yc, side)
+
+    reference = prepare(0, surfaces[0])
+    sum_image = reference.astype(np.uint32)
 
     # Other images of the scans summed with the surface, aligned with its distortion maps :
     # type of the stacked image -> file of the scans. A Ca II H scan also has the H epsilon images : they are
@@ -220,7 +265,7 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
         for name in ('hepsilon', 'hepsilon_protus'):
             if status.get(name):
                 extra[name] = 'sunscan_' + name + '.png'
-    extra_sum_images = {name: imageio.v2.imread(os.path.join(os.path.dirname(paths[0]), basefilename)).astype(np.uint32)
+    extra_sum_images = {name: prepare(0, load(paths[0], basefilename)).astype(np.uint32)
                         for name, basefilename in extra.items()}
     i = 1
     tag = ''
@@ -246,17 +291,17 @@ def stack(paths, status, observer, patch_size, step_size, intensity_threshold, p
         # patch_size : taille du patch de cross-corr�lation
         # step_size : pas de cross-corr�lation (en X et Y)
         # intensity_threshold : seuil d'intensit� en dessous duquel la corr�lation n'est pas calcul�
-        deformed_name = os.path.join(os.path.dirname(p) ,clahe_basefilename)
-        dx_map, dy_map, amplitude_map = find_distorsion(deformed_root,deformed_name, patch_size, step_size, intensity_threshold)
-            
+        deformed = prepare(i - 1, surfaces[i - 1])
+        dx_map, dy_map, amplitude_map = find_distorsion(reference, deformed, patch_size, step_size, intensity_threshold)
+
         # Correction des distorsions dans la s�quence principale (format PNG en entr�e)
-        corrected_image = correct_image_png(deformed_name, dx_map, dy_map)
+        corrected_image = correct_image_png(deformed, dx_map, dy_map)
 
         # Sommation (stacking)
         if i>1:
             sum_image = sum_image + corrected_image.astype(np.uint32)
             for name, basefilename in extra.items():
-                corrected_extra_image = correct_image_png(os.path.join(dirname, basefilename), dx_map, dy_map)
+                corrected_extra_image = correct_image_png(prepare(i - 1, load(p, basefilename)), dx_map, dy_map)
                 extra_sum_images[name] = extra_sum_images[name] + corrected_extra_image.astype(np.uint32)
 
         print('Scan #' + p)

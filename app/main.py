@@ -65,7 +65,7 @@ from dedistor import *
  
 from pydantic import BaseModel
 
-BACKEND_API_VERSION = '2.1.6'
+BACKEND_API_VERSION = '2.1.7'
 
 class SetTimeProp(BaseModel):
     unixtime: str
@@ -1159,6 +1159,11 @@ def process_stack(request: PostProcessRequest):
     try:
         work_dir = stack(request.paths, required_files, request.observer, request.patch_size, request.step_size,
                          request.intensity_threshold, progress=job.report)
+    except StackError as e:
+        if not request.job_id:
+            raise
+        logging.warning('stacking refused: %s %s', e.error, e.detail)
+        return job.fail(e.error, e.detail, 409)
     except Exception as e:
         if not request.job_id:
             # Unchanged for the frontends that do not follow the stacking : HTTP 500
